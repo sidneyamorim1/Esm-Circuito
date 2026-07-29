@@ -1,0 +1,131 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { useStore } from '../state/useStore';
+import type { CircuitComponent } from '../types/circuit';
+
+describe('Zustand Circuit Store', () => {
+  beforeEach(() => {
+    // Reseta o estado do store antes de cada teste
+    useStore.getState().clearCircuit();
+    useStore.getState().setIsSimulating(false);
+    useStore.getState().setTheme('dark');
+  });
+
+  it('deve inicializar com valores padrão corretos', () => {
+    const state = useStore.getState();
+    expect(state.theme).toBe('dark');
+    expect(state.isSimulating).toBe(false);
+    expect(state.components.length).toBe(0);
+    expect(state.wires.length).toBe(0);
+    expect(state.activeTool).toBe('select');
+  });
+
+  it('deve alternar o tema do simulador', () => {
+    const state = useStore.getState();
+    
+    state.setTheme('light');
+    expect(useStore.getState().theme).toBe('light');
+    
+    state.setTheme('dark');
+    expect(useStore.getState().theme).toBe('dark');
+  });
+
+  it('deve alterar o estado da simulação', () => {
+    const state = useStore.getState();
+    expect(state.isSimulating).toBe(false);
+    
+    state.setIsSimulating(true);
+    expect(useStore.getState().isSimulating).toBe(true);
+  });
+
+  it('deve gerenciar componentes no circuito', () => {
+    const state = useStore.getState();
+    
+    const resistor: CircuitComponent = {
+      id: 'resistor-1',
+      type: 'resistor',
+      name: 'Resistor R1',
+      x: 100,
+      y: 200,
+      rotation: 0,
+      properties: {
+        resistance: {
+          name: 'resistance',
+          label: 'Resistência',
+          value: 1000,
+          unit: 'Ω',
+          type: 'number',
+          description: 'Valor da resistência'
+        }
+      },
+      terminals: [
+        { id: 't1', relX: -20, relY: 0, x: 80, y: 200 },
+        { id: 't2', relX: 20, relY: 0, x: 120, y: 200 }
+      ]
+    };
+
+    state.addComponent(resistor);
+    expect(useStore.getState().components.length).toBe(1);
+    expect(useStore.getState().components[0].id).toBe('resistor-1');
+
+    // Remover componente
+    state.removeComponent('resistor-1');
+    expect(useStore.getState().components.length).toBe(0);
+  });
+
+  it('deve desfazer e refazer alterações no circuito', () => {
+    const state = useStore.getState();
+    
+    const resistor: CircuitComponent = {
+      id: 'resistor-2',
+      type: 'resistor',
+      name: 'Resistor R2',
+      x: 150,
+      y: 150,
+      rotation: 0,
+      properties: {},
+      terminals: []
+    };
+
+    // Adiciona componente e gera histórico
+    state.addComponent(resistor);
+    expect(useStore.getState().components.length).toBe(1);
+
+    // Desfazer
+    state.undo();
+    expect(useStore.getState().components.length).toBe(0);
+
+    // Refazer
+    state.redo();
+    expect(useStore.getState().components.length).toBe(1);
+  });
+
+  it('deve copiar, colar e duplicar componentes e fios', () => {
+    const state = useStore.getState();
+    
+    const resistor: CircuitComponent = {
+      id: 'resistor-test',
+      type: 'resistor',
+      name: 'Resistor R10',
+      x: 10,
+      y: 10,
+      rotation: 0,
+      properties: {},
+      terminals: [
+        { id: 't1', relX: -2, relY: 0, x: 8, y: 10 },
+        { id: 't2', relX: 2, relY: 0, x: 12, y: 10 }
+      ]
+    };
+
+    state.addComponent(resistor);
+    state.setSelectedComponentId('resistor-test');
+
+    // Duplicar
+    state.duplicateSelection();
+    expect(useStore.getState().components.length).toBe(2);
+    
+    const copyComp = useStore.getState().components[1];
+    expect(copyComp.x).toBe(13); // 10 + 3
+    expect(copyComp.y).toBe(13); // 10 + 3
+    expect(copyComp.name).toContain('Copia');
+  });
+});
