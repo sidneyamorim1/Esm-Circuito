@@ -13,7 +13,7 @@ import {
   RefreshCw,
   Crown
 } from 'lucide-react';
-import { signUpUser, listUsersFromProfiles } from '../services/supabaseService';
+import { signUpUser, listUsersFromProfiles, updateUserPassword } from '../services/supabaseService';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -27,8 +27,11 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'admin'>('user');
   const [loading, setLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [selectedUserForPassword, setSelectedUserForPassword] = useState<{ id: string; email: string } | null>(null);
+  const [newPassword, setNewPassword] = useState('');
 
   const [users, setUsers] = useState<Array<{ id: string; email: string; role: string; createdAt: string }>>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -47,6 +50,37 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
   }, [isOpen, activeTab]);
 
   if (!isOpen) return null;
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedUserForPassword) {
+      setError('Selecione um usuário para alterar a senha.');
+      return;
+    }
+
+    const cleanPassword = newPassword.trim();
+    if (cleanPassword.length < 6) {
+      setError('A nova senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    setPasswordLoading(true);
+    setError('');
+    setSuccess('');
+
+    const res = await updateUserPassword(selectedUserForPassword.id, cleanPassword);
+    setPasswordLoading(false);
+
+    if (!res.success) {
+      setError(res.error || 'Não foi possível alterar a senha.');
+      return;
+    }
+
+    setSuccess(`Senha de ${selectedUserForPassword.email} alterada com sucesso.`);
+    setNewPassword('');
+    setSelectedUserForPassword(null);
+  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,6 +308,62 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
                 </button>
               </div>
 
+              {selectedUserForPassword && (
+                <form onSubmit={handleChangePassword} className="space-y-3 p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">
+                        Alterar senha
+                      </div>
+                      <div className="text-sm font-semibold text-slate-200">
+                        {selectedUserForPassword.email}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedUserForPassword(null); setNewPassword(''); }}
+                      className="text-xs text-slate-400 hover:text-slate-200"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                      Nova senha
+                    </label>
+                    <div className="relative">
+                      <Lock size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Mínimo 6 caracteres"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={passwordLoading}
+                    className="w-full bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-bold py-2.5 text-sm rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {passwordLoading ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        <span>Atualizando senha...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock size={18} />
+                        <span>Atualizar senha</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+
               {loadingUsers ? (
                 <div className="flex items-center justify-center py-12 text-slate-500 text-sm gap-2">
                   <Loader2 size={20} className="animate-spin" />
@@ -309,6 +399,13 @@ export default function AdminModal({ isOpen, onClose }: AdminModalProps) {
                         }`}>
                           {u.role}
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUserForPassword({ id: u.id, email: u.email })}
+                          className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/20 transition-colors"
+                        >
+                          Senha
+                        </button>
                       </div>
                     </div>
                   ))}

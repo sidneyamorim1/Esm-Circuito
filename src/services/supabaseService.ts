@@ -210,6 +210,34 @@ export async function listUsersFromProfiles(): Promise<Array<{ id: string; email
   }
 }
 
+export async function updateUserPassword(
+  userId: string,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  const client = supabase;
+  if (!isSupabaseConfigured() || !client) {
+    return { success: false, error: 'Supabase não está configurado.' };
+  }
+
+  try {
+    const { data, error } = await client.functions.invoke('admin-change-password', {
+      body: { userId, password }
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Não foi possível atualizar a senha.' };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Erro ao atualizar senha.' };
+  }
+}
+
 // ----------------------------------------------------
 // PERSISTÊNCIA DE PROJETOS NO BANCO DE DADOS
 function isValidUUID(str: string): boolean {
