@@ -89,7 +89,11 @@ AS $$
     FROM public.profiles
     WHERE id = auth.uid()
       AND role = 'admin'
-  );
+  )
+  OR COALESCE(
+    auth.jwt() -> 'user_metadata' ->> 'role',
+    auth.jwt() -> 'app_metadata' ->> 'role'
+  ) = 'admin';
 $$;
 
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
@@ -98,6 +102,17 @@ DROP POLICY IF EXISTS "Admins podem ler todos os perfis" ON public.profiles;
 CREATE POLICY "Admins podem ler todos os perfis"
   ON public.profiles FOR SELECT
   USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Admins podem inserir perfis" ON public.profiles;
+CREATE POLICY "Admins podem inserir perfis"
+  ON public.profiles FOR INSERT
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Admins podem atualizar perfis" ON public.profiles;
+CREATE POLICY "Admins podem atualizar perfis"
+  ON public.profiles FOR UPDATE
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 -- Trigger para criar perfil automaticamente ao cadastrar usuário no Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()

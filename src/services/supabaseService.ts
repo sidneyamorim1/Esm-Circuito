@@ -52,6 +52,21 @@ export async function signUpUser(name: string, email: string, password: string, 
       return { user: null, error: 'Erro inesperado ao criar usuário.' };
     }
 
+    const now = new Date().toISOString();
+    const { error: profileError } = await client
+      .from('profiles')
+      .upsert({
+        id: data.user.id,
+        email: data.user.email || email,
+        role,
+        created_at: now,
+        updated_at: now
+      }, { onConflict: 'id' });
+
+    if (profileError) {
+      console.warn('Usuário criado no Auth, mas a sincronização do profile falhou:', profileError);
+    }
+
     const userData: AuthUserData = {
       id: data.user.id,
       name: data.user.user_metadata?.name || name,
