@@ -323,7 +323,7 @@ export default function App() {
     const handleMove = (event: MouseEvent) => {
       setOscWindowPosition({
         x: event.clientX - oscDragOffset.x,
-        y: Math.max(0, event.clientY - oscDragOffset.y)
+        y: event.clientY - oscDragOffset.y
       });
     };
 
@@ -345,7 +345,7 @@ export default function App() {
     const handleMove = (event: MouseEvent) => {
       setFgenWindowPosition({
         x: event.clientX - fgenDragOffset.x,
-        y: Math.max(0, event.clientY - fgenDragOffset.y)
+        y: event.clientY - fgenDragOffset.y
       });
     };
 
