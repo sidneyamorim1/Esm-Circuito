@@ -926,6 +926,31 @@ export default function CircuitCanvas() {
         if (clickedTerminal) break;
       }
 
+      // Se o clique caiu sobre o corpo/label do componente, tenta prender no terminal
+      // mais próximo dele. Isso deixa a criação de fios mais robusta em componentes
+      // com rótulos e badges grandes, como as pontas de prova.
+      if (!clickedTerminal && clickedId && !isWireId(clickedId) && !clickedId.startsWith('text_')) {
+        const comp = components.find(c => c.id === clickedId);
+        if (comp && comp.terminals.length > 0) {
+          let nearestTerminal: { componentId: string; terminalId: string } | null = null;
+          let nearestDistance = Infinity;
+
+          for (const term of comp.terminals) {
+            const termX = term.x * GRID_SIZE;
+            const termY = term.y * GRID_SIZE;
+            const dist = Math.sqrt((x - termX) ** 2 + (y - termY) ** 2);
+            if (dist < nearestDistance) {
+              nearestDistance = dist;
+              nearestTerminal = { componentId: comp.id, terminalId: term.id };
+            }
+          }
+
+          if (nearestTerminal && nearestDistance < 30) {
+            clickedTerminal = nearestTerminal;
+          }
+        }
+      }
+
       // ESTILO PROTEUS: Tenta interceptar e dividir fio em um nó de junção
       clickedTerminal = getOrInsertJunctionAtWire(x, y, gridX, gridY, clickedTerminal);
 

@@ -13,18 +13,36 @@ export interface AuthUserData {
 // ----------------------------------------------------
 
 export async function signUpUser(name: string, email: string, password: string, role: string = 'user'): Promise<{ user: AuthUserData | null; error: string | null }> {
-  if (!isSupabaseConfigured() || !supabase) {
+  const client = supabase;
+  if (!isSupabaseConfigured() || !client) {
     return { user: null, error: 'Supabase não está configurado. Verifique o arquivo .env.' };
   }
 
+  const { data: sessionData } = await client.auth.getSession();
+  const previousSession = sessionData.session;
+
+  const restorePreviousSession = async () => {
+    if (!previousSession) return;
+    try {
+      await client.auth.setSession({
+        access_token: previousSession.access_token,
+        refresh_token: previousSession.refresh_token
+      });
+    } catch (restoreError) {
+      console.warn('Não foi possível restaurar a sessão anterior após cadastro:', restoreError);
+    }
+  };
+
   try {
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await client.auth.signUp({
       email,
       password,
       options: {
         data: { name, role }
       }
     });
+
+    await restorePreviousSession();
 
     if (error) {
       return { user: null, error: error.message };
@@ -43,6 +61,7 @@ export async function signUpUser(name: string, email: string, password: string, 
 
     return { user: userData, error: null };
   } catch (err: any) {
+    await restorePreviousSession();
     return { user: null, error: err.message || 'Erro ao realizar cadastro.' };
   }
 }
@@ -151,9 +170,10 @@ export function onAuthStateChange(callback: (user: AuthUserData | null) => void)
 }
 
 export async function listUsersFromProfiles(): Promise<Array<{ id: string; email: string; role: string; createdAt: string }>> {
-  if (!isSupabaseConfigured() || !supabase) return [];
+  const client = supabase;
+  if (!isSupabaseConfigured() || !client) return [];
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('profiles')
       .select('id, email, role, created_at')
       .order('created_at', { ascending: false });
@@ -184,11 +204,12 @@ function isValidUUID(str: string): boolean {
 }
 
 export async function saveProjectToCloud(project: CircuitProject): Promise<{ success: boolean; error?: string }> {
-  if (!isSupabaseConfigured() || !supabase) {
+  const client = supabase;
+  if (!isSupabaseConfigured() || !client) {
     return { success: false, error: 'Supabase não configurado.' };
   }
 
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await client.auth.getSession();
   if (!session?.user) {
     return { success: false, error: 'Usuário não autenticado.' };
   }
@@ -205,7 +226,7 @@ export async function saveProjectToCloud(project: CircuitProject): Promise<{ suc
   project.project.updatedAt = now;
 
   try {
-    const { error } = await supabase
+    const { error } = await client
       .from('projects')
       .upsert({
         id: projectId,
@@ -227,12 +248,13 @@ export async function saveProjectToCloud(project: CircuitProject): Promise<{ suc
 }
 
 export async function loadProjectFromCloud(id: string): Promise<CircuitProject | null> {
-  if (!isSupabaseConfigured() || !supabase) {
+  const client = supabase;
+  if (!isSupabaseConfigured() || !client) {
     return null;
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('projects')
       .select('project_data')
       .eq('id', id)
@@ -251,12 +273,13 @@ export async function loadProjectFromCloud(id: string): Promise<CircuitProject |
 }
 
 export async function listProjectsFromCloud(): Promise<Array<{ id: string; name: string; createdAt: string; updatedAt: string }>> {
-  if (!isSupabaseConfigured() || !supabase) {
+  const client = supabase;
+  if (!isSupabaseConfigured() || !client) {
     return [];
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('projects')
       .select('id, name, created_at, updated_at')
       .order('updated_at', { ascending: false });
@@ -279,12 +302,13 @@ export async function listProjectsFromCloud(): Promise<Array<{ id: string; name:
 }
 
 export async function deleteProjectFromCloud(id: string): Promise<boolean> {
-  if (!isSupabaseConfigured() || !supabase) {
+  const client = supabase;
+  if (!isSupabaseConfigured() || !client) {
     return false;
   }
 
   try {
-    const { error } = await supabase
+    const { error } = await client
       .from('projects')
       .delete()
       .eq('id', id);
