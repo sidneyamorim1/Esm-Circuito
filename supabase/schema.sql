@@ -75,6 +75,30 @@ CREATE POLICY "Usuários podem ler seus próprios perfis"
   ON public.profiles FOR SELECT
   USING (auth.uid() = id);
 
+-- Função segura para verificar se o usuário autenticado é admin sem depender
+-- das policies da própria tabela profiles.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE id = auth.uid()
+      AND role = 'admin'
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
+DROP POLICY IF EXISTS "Admins podem ler todos os perfis" ON public.profiles;
+CREATE POLICY "Admins podem ler todos os perfis"
+  ON public.profiles FOR SELECT
+  USING (public.is_admin());
+
 -- Trigger para criar perfil automaticamente ao cadastrar usuário no Auth
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
