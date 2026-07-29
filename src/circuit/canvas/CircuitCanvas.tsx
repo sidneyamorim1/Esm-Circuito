@@ -333,6 +333,7 @@ export default function CircuitCanvas() {
   };
 
   const getComponentLabelBaseY = (comp: CircuitComponent) => {
+    if (comp.type === 'probe_dc' || comp.type === 'probe_ac') return 34;
     if (comp.type === 'pot') return -34;
     if (comp.type.startsWith('transistor')) return -32;
     return -24;

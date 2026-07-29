@@ -979,13 +979,36 @@ export function drawComponent(
       const isAc = comp.type === 'probe_ac';
       const isSimulating = useStore.getState().isSimulating;
       const voltage = comp.simulationState?.voltage ?? 0;
-      const absVolt = Math.abs(voltage);
+      const hasMeasuredValue = comp.simulationState !== undefined;
+      const displayVoltage = Number(comp.simulationState?.custom?.displayVoltage ?? voltage);
+      const accent = isAc ? '#f59e0b' : '#22d3ee';
+      const badgeFill = theme === 'dark' ? '#080e18' : '#172033';
+      const uiFont = '"Segoe UI", Arial, sans-serif';
 
-      ctx.save();
+      const formatVoltage = (value: number) => {
+        const absValue = Math.abs(value);
+        if (absValue >= 1) return `${value.toFixed(2)}V`;
+        if (absValue >= 1e-3) return `${(value * 1e3).toFixed(1)}mV`;
+        if (absValue >= 1e-6) return `${(value * 1e6).toFixed(1)}uV`;
+        return `${value.toFixed(2)}V`;
+      };
+
+      const primaryValue = isAc ? `${formatVoltage(displayVoltage)} pk` : `${formatVoltage(displayVoltage)} DC`;
+      const titleText = isAc ? 'PROBE AC' : 'PROBE DC';
+      const lines = isSimulating || hasMeasuredValue ? [primaryValue] : [titleText];
+      const fontSizes = [10];
+
+      ctx.font = `bold ${fontSizes[0]}px ${uiFont}`;
+      const widestLine = lines.reduce((max, line) => Math.max(max, ctx.measureText(line).width), 0);
+      const badgeWidth = Math.max(88, Math.ceil(widestLine + 24));
+      const badgeHeight = 24;
+      const badgeX = -Math.round(badgeWidth / 2) - 2;
+      const badgeY = -badgeHeight - 16;
+
       // Anel metálico de contato no ponto de medição (0,0)
       ctx.beginPath();
       ctx.arc(0, 0, 5, 0, Math.PI * 2);
-      ctx.fillStyle = isAc ? '#f59e0b' : '#06b6d4';
+      ctx.fillStyle = accent;
       ctx.fill();
       ctx.strokeStyle = isSelected ? colors.selected : '#ffffff';
       ctx.lineWidth = 1.5;
@@ -994,44 +1017,54 @@ export function drawComponent(
       // Haste da agulha inclinada
       ctx.beginPath();
       ctx.moveTo(0, 0);
-      ctx.lineTo(-12, -20);
-      ctx.strokeStyle = isAc ? '#f59e0b' : '#06b6d4';
-      ctx.lineWidth = 2.5;
+      ctx.lineTo(-13, -22);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 2.75;
+      ctx.stroke();
+
+      // Pequeno leader ligando a ponta ao badge, estilo Proteus
+      ctx.beginPath();
+      ctx.moveTo(-2, -4);
+      ctx.lineTo(-22, -18);
+      ctx.lineTo(badgeX + 10, badgeY + badgeHeight);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1.4;
       ctx.stroke();
 
       // Display Digital (Badge)
+      ctx.save();
+      ctx.shadowColor = accent;
+      ctx.shadowBlur = theme === 'dark' ? 10 : 4;
       ctx.beginPath();
-      ctx.roundRect(-55, -46, 86, 24, 6);
-      ctx.fillStyle = theme === 'dark' ? '#0f172a' : '#1e293b';
+      ctx.roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 7);
+      ctx.fillStyle = badgeFill;
       ctx.fill();
-      ctx.strokeStyle = isSelected ? colors.selected : (isAc ? '#f59e0b' : '#06b6d4');
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isSelected ? colors.selected : accent;
+      ctx.lineWidth = 1.4;
       ctx.stroke();
 
+      // Faixa superior sutil, bem no estilo de display de bancada
+      ctx.beginPath();
+      ctx.moveTo(badgeX + 8, badgeY + 7);
+      ctx.lineTo(badgeX + badgeWidth - 8, badgeY + 7);
+      ctx.strokeStyle = theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Pequeno marcador circular reforçando o visual de instrumento
+      ctx.beginPath();
+      ctx.arc(badgeX + 10, badgeY + badgeHeight / 2, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = accent;
+      ctx.fill();
+      ctx.restore();
+
       // Rótulo da Ponta de Prova
-      ctx.fillStyle = isAc ? '#fbbf24' : '#22d3ee';
-      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = accent;
+      ctx.font = `bold ${fontSizes[0]}px ${uiFont}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      if (!isSimulating) {
-        ctx.fillText(isAc ? 'PROBE AC' : 'PROBE DC', -12, -34);
-      } else {
-        if (!isAc) {
-          let valStr = `${voltage.toFixed(2)}V`;
-          if (absVolt < 1 && absVolt >= 1e-3) valStr = `${(voltage * 1e3).toFixed(1)}mV`;
-          ctx.fillText(`${valStr} DC`, -12, -34);
-        } else {
-          // Ponta de Prova AC mostra Vpeak e RMS
-          const vPeak = Number(comp.simulationState?.custom?.vPeak ?? absVolt);
-          const vRms = Number(comp.simulationState?.custom?.vRms ?? (vPeak / Math.SQRT2));
-          let valStr = `${vPeak.toFixed(1)}Vpk`;
-          if (vPeak < 1) valStr = `${(vPeak * 1e3).toFixed(0)}mVpk`;
-          let rmsStr = `${vRms.toFixed(1)}Vrms`;
-          if (vRms < 1) rmsStr = `${(vRms * 1e3).toFixed(1)}mVrms`;
-          ctx.fillText(`${valStr} (${rmsStr})`, -12, -34);
-        }
-      }
+      ctx.fillText(lines[0], 0, badgeY + 12);
 
       ctx.restore();
       break;
@@ -1274,7 +1307,7 @@ export function drawComponent(
 
   // Identificador de Referência Global (ex: R1, D1) para componentes básicos
   // Pula a renderização padrão de ref para meters e junções
-  if (comp.type !== 'junction') {
+  if (comp.type !== 'junction' && comp.type !== 'probe_dc' && comp.type !== 'probe_ac') {
     // Exibe o nome editável do componente. Se não houver nome, cai em uma referência curta.
     const typeInitial = comp.type === 'resistor' || comp.type === 'pot' ? 'R' : 
                         comp.type.startsWith('capacitor') ? 'C' : 
@@ -1291,10 +1324,11 @@ export function drawComponent(
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'center';
     
-    // Posiciona em cima do componente
+    // Ajusta o rótulo de acordo com a geometria do componente.
+    // Probes usam badge superior, então o nome precisa ficar abaixo.
     let yOff = -24;
-    // Se for pot, tem que ficar mais afastado por causa da caixa 
-    if (comp.type === 'pot') yOff = -34;
+    if (comp.type === 'probe_dc' || comp.type === 'probe_ac') yOff = 34;
+    else if (comp.type === 'pot') yOff = -34;
     else if (comp.type.startsWith('transistor')) yOff = -32;
 
     const labelX = (comp.labelOffset?.x ?? 0) * GRID_SIZE;

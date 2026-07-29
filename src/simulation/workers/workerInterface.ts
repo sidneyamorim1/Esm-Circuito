@@ -17,7 +17,10 @@ class SimulationManager {
     inductorVoltages: {},
     inductorCurrents: {},
     time: 0,
-    nodeVoltages: {}
+    nodeVoltages: {},
+    probePeaks: {},
+    probeDisplayValues: {},
+    probeDisplayTimes: {}
   };
 
   constructor() {
@@ -112,7 +115,10 @@ class SimulationManager {
         inductorVoltages: {},
         inductorCurrents: {},
         time: 0,
-        nodeVoltages: {}
+        nodeVoltages: {},
+        probePeaks: {},
+        probeDisplayValues: {},
+        probeDisplayTimes: {}
       };
       this.handleSimulationResults({ nodeVoltages: {}, branchCurrents: {}, wireCurrents: {}, componentStates: {} }, 0);
       return;

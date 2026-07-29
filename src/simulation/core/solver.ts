@@ -62,6 +62,8 @@ export interface SolverState {
   time: number;
   nodeVoltages: Record<string, number>;
   probePeaks?: Record<string, number>;
+  probeDisplayValues?: Record<string, number>;
+  probeDisplayTimes?: Record<string, number>;
 }
 
 interface ExtraRestriction {
@@ -234,6 +236,28 @@ export function runSimulationStep(
       });
     }
   });
+
+  // Se não houver terra explícito, usa o terminal negativo da primeira fonte
+  // como referência elétrica. Isso evita leituras arbitrárias em circuitos
+  // flutuantes, como gerador de sinais + probe.
+  if (groundRoot === null) {
+    const preferredReferenceTypes = new Set([
+      'source_dc',
+      'source_ac',
+      'source_pulse',
+      'source_current',
+      'function_generator'
+    ]);
+
+    for (const comp of components) {
+      if (!preferredReferenceTypes.has(comp.type)) continue;
+      const negativeTerminal = comp.terminals.find(term => term.id === 'n');
+      if (negativeTerminal) {
+        groundRoot = find(getTerminalKey(comp.id, negativeTerminal.id));
+        break;
+      }
+    }
+  }
 
   // Mapeia raízes do Union-Find para inteiros ordenados
   // O Ground é sempre o nó 0.
@@ -881,6 +905,8 @@ export function runSimulationStep(
   const nextInductorVoltages = { ...state.inductorVoltages };
   const nextInductorCurrents = { ...state.inductorCurrents };
   const nextProbePeaks = { ...state.probePeaks };
+  const nextProbeDisplayValues = { ...state.probeDisplayValues };
+  const nextProbeDisplayTimes = { ...state.probeDisplayTimes };
 
   // Calcula correntes e potências para cada componente
   components.forEach(comp => {
@@ -1079,6 +1105,23 @@ export function runSimulationStep(
         const nextPeak = Math.max(prevPeak * 0.998, currentAbs);
         nextProbePeaks[comp.id] = nextPeak;
       }
+
+      const rawDisplayValue = comp.type === 'probe_ac'
+        ? (nextProbePeaks[comp.id] ?? Math.abs(voltage))
+        : voltage;
+      const prevDisplayValue = state.probeDisplayValues?.[comp.id];
+      const prevDisplayTime = state.probeDisplayTimes?.[comp.id] ?? -Infinity;
+      const displayInterval = 0.2;
+      const displayThreshold = comp.type === 'probe_ac' ? 0.05 : 0.01;
+
+      if (
+        prevDisplayValue === undefined ||
+        (state.time - prevDisplayTime) >= displayInterval ||
+        Math.abs(rawDisplayValue - prevDisplayValue) >= displayThreshold
+      ) {
+        nextProbeDisplayValues[comp.id] = rawDisplayValue;
+        nextProbeDisplayTimes[comp.id] = state.time;
+      }
     }
 
     let isBurned = false;
@@ -1111,7 +1154,15 @@ export function runSimulationStep(
       power: Math.abs(voltage * current),
       isBurned,
       burnMessage,
-      custom: comp.type === 'probe_ac' ? { vPeak: acPeak, vRms: (acPeak ?? 0) / Math.SQRT2 } : undefined
+      custom: comp.type === 'probe_ac'
+        ? {
+            vPeak: acPeak,
+            vRms: (acPeak ?? 0) / Math.SQRT2,
+            displayVoltage: nextProbeDisplayValues[comp.id] ?? acPeak ?? Math.abs(voltage)
+          }
+        : comp.type === 'probe_dc'
+          ? { displayVoltage: nextProbeDisplayValues[comp.id] ?? voltage }
+          : undefined
     };
   });
 
@@ -1218,6 +1269,8 @@ export function runSimulationStep(
       inductorVoltages: nextInductorVoltages,
       inductorCurrents: nextInductorCurrents,
       probePeaks: nextProbePeaks,
+      probeDisplayValues: nextProbeDisplayValues,
+      probeDisplayTimes: nextProbeDisplayTimes,
       time: state.time + dt,
       nodeVoltages
     }
