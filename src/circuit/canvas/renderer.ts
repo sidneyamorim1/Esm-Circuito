@@ -213,12 +213,14 @@ export function drawComponent(
       if (Number(rVal) >= 1e6) labelText = `${(Number(rVal) / 1e6).toFixed(1)}M`;
       else if (Number(rVal) >= 1e3) labelText = `${(Number(rVal) / 1e3).toFixed(1)}k`;
 
+      // Desenha texto sem espelhamento
       ctx.save();
       ctx.translate(0, 18);
       // Mantém texto na vertical se rotacionado
       if (rotation === 90 || rotation === 270) {
         ctx.rotate(-Math.PI / 2);
       }
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
       ctx.font = '10px font-mono';
       ctx.textAlign = 'center';
@@ -253,12 +255,13 @@ export function drawComponent(
       ctx.fillText('+', -18, -12);
       ctx.fillText('-', 18, -8);
 
-      // Label da tensão
+      // Label da tensão (texto sem espelhamento)
       const vVal = comp.properties.voltage?.value ?? 5;
       const currentLimit = comp.properties.currentLimit?.value ?? 1;
       ctx.save();
       ctx.translate(0, 24);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.font = '10px font-mono';
       ctx.fillText(comp.type === 'bench_supply' ? `${vVal}V ${currentLimit}A` : `${vVal}V`, 0, 0);
       if (comp.type === 'bench_supply') {
@@ -306,6 +309,7 @@ export function drawComponent(
       ctx.save();
       ctx.translate(0, 28);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
       ctx.font = '9px font-mono';
       ctx.textAlign = 'center';
@@ -388,6 +392,7 @@ export function drawComponent(
       ctx.save();
       ctx.translate(0, 28);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
       ctx.font = '9px font-mono';
       ctx.textAlign = 'center';
@@ -466,7 +471,7 @@ export function drawComponent(
       }
       ctx.stroke();
 
-      // Label do valor
+      // Label do valor (texto sem espelhamento)
       const cVal = comp.properties.capacitance?.value ?? 1e-6;
       let labelText = `${Number(cVal)*1e6}μF`;
       if (Number(cVal) < 1e-6) labelText = `${Number(cVal)*1e9}nF`;
@@ -475,6 +480,7 @@ export function drawComponent(
       ctx.save();
       ctx.translate(0, 24);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
       ctx.font = '9px font-mono';
       ctx.textAlign = 'center';
@@ -579,13 +585,14 @@ export function drawComponent(
       ctx.arc(18, 0, 6, Math.PI, 0, false);
       ctx.stroke();
 
-      // Label
+      // Label (texto sem espelhamento)
       const lVal = comp.properties.inductance?.value ?? 1e-3;
       let labelText = `${Number(lVal)*1e3}mH`;
       if (Number(lVal) < 1e-3) labelText = `${Number(lVal)*1e6}μH`;
       ctx.save();
       ctx.translate(0, 18);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
       ctx.font = '9px font-mono';
       ctx.textAlign = 'center';
@@ -642,12 +649,15 @@ export function drawComponent(
       ctx.fill();
       ctx.stroke();
 
-      // Letra M
+      // Letra M (texto sem espelhamento)
+      ctx.save();
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
       ctx.font = 'bold 16px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText('M', 0, 0);
+      ctx.restore();
 
       // Animação de Rotação (se corrente for > 0)
       const current = comp.simulationState?.current || 0;
@@ -728,6 +738,7 @@ export function drawComponent(
 
       // Labels internos
       ctx.save();
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
       ctx.font = '7px sans-serif';
       ctx.textAlign = 'right';
@@ -1406,6 +1417,9 @@ export function drawComponent(
     const labelX = (comp.labelOffset?.x ?? 0) * GRID_SIZE;
     const labelY = yOff + (comp.labelOffset?.y ?? 0) * GRID_SIZE;
 
+    if (comp.mirrorX || comp.mirrorY) {
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
+    }
     ctx.fillText(refText, labelX, labelY);
     ctx.restore();
   }
