@@ -2,14 +2,18 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useStore } from '../../state/useStore';
 import { Sliders, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import type { CircuitComponent, PcbLayoutComponent, PcbRoute, Terminal } from '../../types/circuit';
 
 interface Pcb3dViewerProps {
+  boardName?: string;
   boardColor: string;
   setBoardColor: (color: string) => void;
   boardDimensions: { width: number; height: number };
+  pcbLayout?: Record<string, PcbLayoutComponent>;
+  pcbRoutes?: Record<string, PcbRoute>;
 }
 
-export default function Pcb3dViewer({ boardColor, setBoardColor, boardDimensions }: Pcb3dViewerProps) {
+export default function Pcb3dViewer({ boardName = 'Board 1', boardColor, setBoardColor, boardDimensions, pcbLayout = {}, pcbRoutes = {} }: Pcb3dViewerProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const { components, wires, isSimulating } = useStore();
 
@@ -114,33 +118,74 @@ export default function Pcb3dViewer({ boardColor, setBoardColor, boardDimensions
     boardGridHelper.position.y = boardThickness / 2 + 0.005;
     scene.add(boardGridHelper);
 
-    // Helper para converter coordenada do Grid local do simulador para 3D
-    const to3DCoords = (gridX: number, gridY: number, heightOffset = boardThickness / 2) => {
-      const x = gridX - centerX;
-      const z = gridY - centerY;
+    const hasPcbLayout = Object.keys(pcbLayout).length > 0;
+
+    // Helper para converter coordenada da placa para 3D
+    const to3DCoords = (boardX: number, boardY: number, heightOffset = boardThickness / 2) => {
+      const x = boardX;
+      const z = boardY;
       return new THREE.Vector3(x, heightOffset, z);
+    };
+
+    const rotateTerminal = (term: Terminal, rotation: number) => {
+      const angle = (rotation * Math.PI) / 180;
+      const relX = term.relX * 0.35;
+      const relY = term.relY * 0.35;
+      return {
+        x: relX * Math.cos(angle) - relY * Math.sin(angle),
+        y: relX * Math.sin(angle) + relY * Math.cos(angle)
+      };
+    };
+
+    const getComponentBoardPosition = (comp: CircuitComponent) => {
+      const layout = pcbLayout[comp.id];
+      if (layout) return {
+        x: layout.x,
+        y: layout.y,
+        rotation: layout.rotation ?? comp.rotation
+      };
+
+      return {
+        x: comp.x - centerX,
+        y: comp.y - centerY,
+        rotation: comp.rotation
+      };
+    };
+
+    const getTerminalBoardPosition = (comp: CircuitComponent, term: Terminal) => {
+      const compPos = getComponentBoardPosition(comp);
+      if (hasPcbLayout) {
+        const rel = rotateTerminal(term, compPos.rotation);
+        return { x: compPos.x + rel.x, y: compPos.y + rel.y };
+      }
+
+      return { x: term.x - centerX, y: term.y - centerY };
     };
 
     // 5. Renderização dos Pads e Componentes
     const renderedPads = new Set<string>();
 
     components.forEach(comp => {
-      const compPos = to3DCoords(comp.x, comp.y);
+      const compBoardPos = getComponentBoardPosition(comp);
+      const compPos = to3DCoords(compBoardPos.x, compBoardPos.y);
       const group = new THREE.Group();
       group.position.copy(compPos);
       
       // Rotação do componente (convertida de graus para radianos em torno de Y)
-      group.rotation.y = -THREE.MathUtils.degToRad(comp.rotation);
+      group.rotation.y = -THREE.MathUtils.degToRad(compBoardPos.rotation);
       scene.add(group);
 
       // Renderiza Pads (furos de solda metalizados)
       comp.terminals.forEach(term => {
-        const termPosLocal = to3DCoords(term.x, term.y).sub(compPos);
-        const padKey = `${term.x},${term.y}`;
+        const termBoardPos = getTerminalBoardPosition(comp, term);
+        const termPosLocal = hasPcbLayout
+          ? new THREE.Vector3(term.relX * 0.35, 0, term.relY * 0.35)
+          : to3DCoords(termBoardPos.x, termBoardPos.y).sub(compPos);
+        const padKey = `${termBoardPos.x.toFixed(3)},${termBoardPos.y.toFixed(3)}`;
         
         // Verifica se o terminal está fora da placa física (DRC)
-        const isOutside = Math.abs(term.x - centerX) > boardWidth / 2 ||
-                           Math.abs(term.y - centerY) > boardHeight / 2;
+        const isOutside = Math.abs(termBoardPos.x) > boardWidth / 2 ||
+                           Math.abs(termBoardPos.y) > boardHeight / 2;
         const currentPadMat = isOutside ? drcErrorMaterial : copperMaterial;
 
         if (!renderedPads.has(padKey)) {
@@ -543,30 +588,19 @@ export default function Pcb3dViewer({ boardColor, setBoardColor, boardDimensions
 
       if (!termFrom || !termTo) return;
 
-      // Pega coordenadas de grid
-      const x1 = termFrom.x;
-      const y1 = termFrom.y;
-      const x2 = termTo.x;
-      const y2 = termTo.y;
+      const fromBoard = getTerminalBoardPosition(compFrom, termFrom);
+      const toBoard = getTerminalBoardPosition(compTo, termTo);
+      const routePoints = pcbRoutes[wire.id]?.points || [];
 
       // Coordenadas mundiais 3D no fundo da placa (-boardThickness/2 - 0.002)
-      const p1 = to3DCoords(x1, y1, -boardThickness / 2 - 0.005);
-      const p2 = to3DCoords(x2, y2, -boardThickness / 2 - 0.005);
+      const p1 = to3DCoords(fromBoard.x, fromBoard.y, -boardThickness / 2 - 0.005);
+      const p2 = to3DCoords(toBoard.x, toBoard.y, -boardThickness / 2 - 0.005);
 
-      // Traça caminho ortogonal (como o desenho 2D do fio)
-      const points: THREE.Vector3[] = [];
-      points.push(p1);
-
-      if (x1 !== x2 && y1 !== y2) {
-        if (wire.verticalFirst) {
-          // Dobra vertical primeiro
-          points.push(new THREE.Vector3(p1.x, p1.y, p2.z));
-        } else {
-          // Dobra horizontal primeiro
-          points.push(new THREE.Vector3(p2.x, p1.y, p1.z));
-        }
-      }
-      points.push(p2);
+      const points: THREE.Vector3[] = [
+        p1,
+        ...routePoints.map(point => to3DCoords(point.x, point.y, -boardThickness / 2 - 0.005)),
+        p2
+      ];
 
       // Desenha a trilha como uma fita plana fina 3D (para cada segmento)
       for (let i = 0; i < points.length - 1; i++) {
@@ -639,7 +673,7 @@ export default function Pcb3dViewer({ boardColor, setBoardColor, boardDimensions
       }
       renderer.dispose();
     };
-  }, [components, wires, isSimulating, boardColor, boardDimensions]);
+  }, [components, wires, isSimulating, boardColor, boardDimensions, pcbLayout, pcbRoutes]);
 
   // Manipuladores de mouse para rotação esférica (Orbit simplificado)
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -683,7 +717,14 @@ export default function Pcb3dViewer({ boardColor, setBoardColor, boardDimensions
   return (
     <div className="w-full h-full flex flex-col relative bg-slate-100 dark:bg-slate-950 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-inner">
       {/* Controles de Placa superiores */}
-      <div className="absolute top-4 left-4 z-10 flex items-center space-x-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 py-2 rounded-xl shadow-md border border-slate-200/50 dark:border-slate-800/50 text-xs">
+      <div className="absolute top-4 left-4 z-10 flex items-center space-x-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 py-2 rounded-xl shadow-md border border-slate-200/50 dark:border-slate-800/50 text-xs">
+        <div className="flex flex-col leading-tight">
+          <span className="font-bold text-slate-700 dark:text-slate-200">{boardName}</span>
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+            {(boardDimensions.width * 10).toFixed(0)} x {(boardDimensions.height * 10).toFixed(0)} mm
+          </span>
+        </div>
+        <div className="h-7 w-px bg-slate-200 dark:bg-slate-700" />
         <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 font-medium">
           <Sliders className="w-3.5 h-3.5" />
           <span>Máscara de Solda:</span>

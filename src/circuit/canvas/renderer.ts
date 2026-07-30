@@ -12,7 +12,7 @@ const COLORS = {
     wireVoltPos: '#dc2626', // Fio positivo Vermelho
     wireVoltNeg: '#2563eb', // Fio negativo Azul
     wireVoltNeutral: '#166534', // Mantém verde neutro
-    electron: '#f59e0b', // Elétron (se animado)
+    electron: '#22c55e', // Elétron (fluxo de corrente em verde brilhante)
     component: '#7f1d1d', // Componentes em vermelho escuro/bordô
     selected: '#6366f1', // Seleção (azul)
     text: '#111827', // Texto Quase Preto
@@ -25,7 +25,7 @@ const COLORS = {
     wireVoltPos: '#ef4444', 
     wireVoltNeg: '#3b82f6', 
     wireVoltNeutral: '#16a34a',
-    electron: '#fbbf24', 
+    electron: '#4ade80', // Fluxo de corrente em verde brilhante no tema escuro
     component: '#fca5a5', // Componentes avermelhados
     selected: '#818cf8', 
     text: '#f1f5f9',
@@ -93,8 +93,8 @@ function drawElectrons(
   const uy = dy / length;
 
   // Velocidade proporcional à corrente (com limitadores)
-  const baseSpeed = 100; // Pixels por segundo
-  const currentFactor = Math.min(Math.abs(current) * 10, 5); // Limita velocidade
+  const baseSpeed = 30; // Pixels por segundo (velocidade base reduzida)
+  const currentFactor = Math.min(Math.abs(current) * 10, 3); // Limita velocidade máxima
   const speed = baseSpeed * currentFactor * (current < 0 ? -1 : 1);
   
   const electronSpacing = 15; // pixels entre elétrons
@@ -261,7 +261,7 @@ export function drawComponent(
       ctx.save();
       ctx.translate(0, 24);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
-      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
+      // No scaling for voltage label to prevent mirroring
       ctx.font = '10px font-mono';
       ctx.fillText(comp.type === 'bench_supply' ? `${vVal}V ${currentLimit}A` : `${vVal}V`, 0, 0);
       if (comp.type === 'bench_supply') {
@@ -663,7 +663,7 @@ export function drawComponent(
       const current = comp.simulationState?.current || 0;
       if (Math.abs(current) > 0.01) {
         ctx.save();
-        const speed = current * 10;
+        const speed = current * 3;
         const time = Date.now() / 1000;
         const angle = time * speed;
         ctx.rotate(angle);

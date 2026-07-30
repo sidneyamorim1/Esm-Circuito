@@ -1,5 +1,50 @@
 import type { CircuitComponent, Terminal, ComponentProperty } from '../types/circuit';
 
+const SI_PREFIX_MULTIPLIERS: Record<string, number> = {
+  p: 1e-12,
+  n: 1e-9,
+  u: 1e-6,
+  'µ': 1e-6,
+  m: 1e-3,
+  k: 1e3,
+  K: 1e3,
+  M: 1e6,
+};
+
+export function parseSiValue(input: string | number): number {
+  if (typeof input === 'number') return input;
+
+  const normalized = input.trim().replace(',', '.');
+  if (!normalized) return Number.NaN;
+
+  const match = normalized.match(/^([-+]?\d*\.?\d+)\s*([pnuµmkKM]?)\s*[a-zA-ZΩ]*$/);
+  if (!match) return Number(normalized);
+
+  const value = Number(match[1]);
+  const multiplier = SI_PREFIX_MULTIPLIERS[match[2]] ?? 1;
+  return value * multiplier;
+}
+
+export function formatSiValue(value: number, unit = ''): string {
+  if (!Number.isFinite(value)) return '';
+
+  const abs = Math.abs(value);
+  const prefixes = [
+    { prefix: 'M', multiplier: 1e6 },
+    { prefix: 'k', multiplier: 1e3 },
+    { prefix: 'm', multiplier: 1e-3 },
+    { prefix: 'u', multiplier: 1e-6 },
+    { prefix: 'n', multiplier: 1e-9 },
+    { prefix: 'p', multiplier: 1e-12 }
+  ];
+
+  const selected = prefixes.find(item => abs >= item.multiplier && abs / item.multiplier < 1000);
+  if (!selected) return `${value}${unit}`;
+
+  const scaled = value / selected.multiplier;
+  return `${Number(scaled.toPrecision(4))}${selected.prefix}${unit}`;
+}
+
 // Função para rotacionar coordenadas inteiras de terminais
 export function rotateTerminalCoords(relX: number, relY: number, rotation: number): { relX: number; relY: number } {
   const angle = (rotation % 360 + 360) % 360;
@@ -204,7 +249,7 @@ function getDefaultProperties(type: string): Record<string, ComponentProperty> {
         value: 1e-6,
         unit: 'F',
         type: 'number',
-        description: 'Capacidade de armazenar carga elétrica'
+        description: 'Aceita valores como 470uF, 100nF, 22pF ou 0.00047F'
       };
       break;
     case 'inductor':

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '../state/useStore';
 import type { CircuitComponent, CircuitWire } from '../types/circuit';
+import { formatSiValue, parseSiValue } from '../utils/circuitUtils';
 
 describe('Zustand Circuit Store', () => {
   beforeEach(() => {
@@ -36,6 +37,15 @@ describe('Zustand Circuit Store', () => {
     
     state.setIsSimulating(true);
     expect(useStore.getState().isSimulating).toBe(true);
+  });
+
+  it('deve aceitar capacitancia com prefixos como uF, nF e pF', () => {
+    expect(parseSiValue('470uF')).toBeCloseTo(470e-6);
+    expect(parseSiValue('100nF')).toBeCloseTo(100e-9);
+    expect(parseSiValue('22pF')).toBeCloseTo(22e-12);
+    expect(parseSiValue('')).toBeNaN();
+    expect(formatSiValue(470e-6, 'F')).toBe('470uF');
+    expect(formatSiValue(Number.NaN, 'F')).toBe('');
   });
 
   it('deve gerenciar componentes no circuito', () => {

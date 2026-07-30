@@ -66,6 +66,16 @@ export interface Viewport {
   zoom: number;
 }
 
+export interface PcbLayoutComponent {
+  x: number;
+  y: number;
+  rotation?: number;
+}
+
+export interface PcbRoute {
+  points: { x: number; y: number }[];
+}
+
 export interface ProjectMetadata {
   id: string;
   name: string;
@@ -88,6 +98,14 @@ export interface CircuitProject {
   wires: CircuitWire[];
   texts?: CircuitText[];
   viewport: Viewport;
+  board?: {
+    name?: string;
+    width: number;
+    height: number;
+    color: string;
+  };
+  pcbLayout?: Record<string, PcbLayoutComponent>;
+  pcbRoutes?: Record<string, PcbRoute>;
 }
 
 export interface SimulationResult {

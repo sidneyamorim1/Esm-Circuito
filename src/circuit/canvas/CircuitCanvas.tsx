@@ -1,9 +1,9 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../state/useStore';
 import { drawGrid, drawComponent, drawWires, GRID_SIZE } from './renderer';
-import { createCircuitComponent, updateComponentTerminals } from '../../utils/circuitUtils';
+import { createCircuitComponent, formatSiValue, parseSiValue, updateComponentTerminals } from '../../utils/circuitUtils';
 import { simulationManager } from '../../simulation/workers/workerInterface';
-import type { CircuitComponent, CircuitWire } from '../../types/circuit';
+import type { CircuitComponent, CircuitWire, ComponentProperty } from '../../types/circuit';
 import { Copy, Clipboard as PasteIcon, Trash2, RotateCw, Layers, Sliders } from 'lucide-react';
 
 export default function CircuitCanvas() {
@@ -81,6 +81,7 @@ export default function CircuitCanvas() {
   }>({ visible: false, text: '', mode: 'add' });
   const [selectedComponentIds, setSelectedComponentIds] = useState<string[]>([]);
   const [selectedWireIds, setSelectedWireIds] = useState<string[]>([]);
+  const [propertyDrafts, setPropertyDrafts] = useState<Record<string, string>>({});
   const groupDragOffsetsRef = useRef<Record<string, { x: number; y: number }>>({});
   const groupDragStartRef = useRef<{ x: number; y: number } | null>(null);
   const groupWireRoutePointsRef = useRef<Record<string, { x: number; y: number }[]>>({});
@@ -108,6 +109,56 @@ export default function CircuitCanvas() {
   // Atualiza as dimensões do canvas ao redimensionar o container
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const isWireId = (id: string | null | undefined) => Boolean(id && wires.some(w => w.id === id));
+  const getPropertyDraftKey = (componentId: string, propertyKey: string) => `${componentId}:${propertyKey}`;
+  const getPropertyInputValue = (componentId: string, propertyKey: string, property: ComponentProperty) => {
+    const draftKey = getPropertyDraftKey(componentId, propertyKey);
+    if (Object.prototype.hasOwnProperty.call(propertyDrafts, draftKey)) {
+      return propertyDrafts[draftKey];
+    }
+
+    if (propertyKey === 'capacitance' && typeof property.value === 'number') {
+      return formatSiValue(property.value, property.unit);
+    }
+
+    return String(property.value);
+  };
+  const updatePropertyInputValue = (
+    componentId: string,
+    propertyKey: string,
+    property: ComponentProperty,
+    rawValue: string
+  ) => {
+    if (propertyKey === 'capacitance') {
+      const draftKey = getPropertyDraftKey(componentId, propertyKey);
+      setPropertyDrafts(prev => ({ ...prev, [draftKey]: rawValue }));
+      return;
+    }
+
+    const val = property.type === 'number' ? parseSiValue(rawValue) : rawValue;
+    updateComponentProperty(componentId, propertyKey, val);
+  };
+  const commitPropertyInputValue = (componentId: string, propertyKey: string) => {
+    const draftKey = getPropertyDraftKey(componentId, propertyKey);
+    const draft = propertyDrafts[draftKey];
+    if (draft === undefined) return;
+
+    const parsed = parseSiValue(draft);
+    setPropertyDrafts(prev => {
+      const next = { ...prev };
+      delete next[draftKey];
+      return next;
+    });
+
+    if (Number.isFinite(parsed)) {
+      updateComponentProperty(componentId, propertyKey, parsed);
+    }
+  };
+
+  useEffect(() => {
+    if (!propertiesModalCompId) {
+      setPropertyDrafts({});
+    }
+  }, [propertiesModalCompId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -149,7 +200,12 @@ export default function CircuitCanvas() {
       delete rest.simulationState;
       return rest;
     });
-    return JSON.stringify(strippedComps) + JSON.stringify(wires);
+    const strippedWires = wires.map(w => {
+      const rest = { ...w };
+      delete rest.simulationState;
+      return rest;
+    });
+    return JSON.stringify(strippedComps) + JSON.stringify(strippedWires);
   }, [components, wires]);
 
   useEffect(() => {
@@ -911,6 +967,29 @@ export default function CircuitCanvas() {
       return;
     }
 
+    // AUTO-WIRE: Se estiver no modo select e clicar em um terminal, inicia fio automaticamente
+    if (activeTool === 'select') {
+      let autoTerminal: { componentId: string; terminalId: string } | null = null;
+      for (const comp of components) {
+        for (const term of comp.terminals) {
+          const termX = term.x * GRID_SIZE;
+          const termY = term.y * GRID_SIZE;
+          const dist = Math.sqrt((x - termX) ** 2 + (y - termY) ** 2);
+          if (dist < 12) {
+            autoTerminal = { componentId: comp.id, terminalId: term.id };
+            break;
+          }
+        }
+        if (autoTerminal) break;
+      }
+      if (autoTerminal) {
+        setActiveTool('wire');
+        setWireStart(autoTerminal);
+        setWireRoutePoints([]);
+        return;
+      }
+    }
+
     // ESTILO PROTEUS: Duplo clique esquerdo abre modal de propriedades
     const clickedId = trySelectElementAt(x, y);
     if (clickedId) {
@@ -1035,13 +1114,18 @@ export default function CircuitCanvas() {
           setWireStart(null);
           setWireRoutePoints([]);
           setTempVerticalFirst(false);
-          // Permanece no modo 'wire' para desenhar mais fios
+          // Volta ao modo cursor após completar o fio
+          setActiveTool('select');
         }
       } else {
-        // Clicou fora dos pinos/fios (no vazio): registra uma curva/waypoint sem criar nó elétrico
+        // Clicou fora dos pinos/fios (no vazio)
         if (wireStart) {
+          // Se já iniciou um fio, registra uma curva/waypoint
           setWireRoutePoints(prev => [...prev, { x: gridX, y: gridY }]);
           setTempVerticalFirst(false);
+        } else {
+          // Sem fio iniciado, volta ao modo cursor
+          setActiveTool('select');
         }
       }
       return;
@@ -1720,13 +1804,21 @@ export default function CircuitCanvas() {
         }}
         className="block w-full h-full touch-none"
       />
-      {contextMenu?.visible && (
+      {contextMenu?.visible && (() => {
+        const menuWidth = 176; // w-44 = 11rem = 176px
+        const menuHeight = 320; // altura estimada do menu
+        const canvasRect = canvasRef.current?.getBoundingClientRect();
+        const rawX = (canvasRect?.left ?? 0) + contextMenu.x;
+        const rawY = (canvasRect?.top ?? 0) + contextMenu.y;
+        const adjustedX = rawX + menuWidth > window.innerWidth ? rawX - menuWidth : rawX;
+        const adjustedY = rawY + menuHeight > window.innerHeight ? rawY - menuHeight : rawY;
+        return (
         <div
           style={{
-            position: 'absolute',
-            top: contextMenu.y,
-            left: contextMenu.x,
-            zIndex: 1000
+            position: 'fixed',
+            top: Math.max(4, adjustedY),
+            left: Math.max(4, adjustedX),
+            zIndex: 99999
           }}
           className="w-44 py-1.5 rounded-xl shadow-2xl backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 text-xs flex flex-col gap-0.5 bg-white/90 dark:bg-slate-900/95 text-slate-800 dark:text-slate-100"
         >
@@ -1879,7 +1971,8 @@ export default function CircuitCanvas() {
             </>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {propertiesModalCompId && (
         <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
@@ -1943,16 +2036,27 @@ export default function CircuitCanvas() {
                       </select>
                     ) : (
                       <input
-                        type={prop.type === 'number' ? 'number' : 'text'}
-                        value={String(prop.value)}
+                        type={prop.type === 'number' && key !== 'capacitance' ? 'number' : 'text'}
+                        value={getPropertyInputValue(propertiesModalCompId, key, prop)}
                         onChange={(e) => {
-                          const val = prop.type === 'number' ? parseFloat(e.target.value) : e.target.value;
-                          updateComponentProperty(propertiesModalCompId, key, val);
+                          updatePropertyInputValue(propertiesModalCompId, key, prop, e.target.value);
                         }}
+                        onBlur={() => {
+                          if (key === 'capacitance') {
+                            commitPropertyInputValue(propertiesModalCompId, key);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (key === 'capacitance' && e.key === 'Enter') {
+                            commitPropertyInputValue(propertiesModalCompId, key);
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        placeholder={key === 'capacitance' ? 'ex: 470uF' : undefined}
                         className="flex-1 text-xs px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono"
                       />
                     )}
-                    {prop.unit && (
+                    {prop.unit && key !== 'capacitance' && (
                       <span className="text-xs font-mono font-bold text-slate-500 w-8">{prop.unit}</span>
                     )}
                   </div>

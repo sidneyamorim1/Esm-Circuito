@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useStore } from '../state/useStore';
 import CircuitCanvas from '../circuit/canvas/CircuitCanvas';
+import PcbLayoutEditor from '../circuit/pcb/PcbLayoutEditor';
 import Pcb3dViewer from '../circuit/pcb/Pcb3dViewer';
 import { circuitExamples, type CircuitExample } from '../examples/circuits';
 import { saveProject } from '../storage/db';
 import { simulationManager } from '../simulation/workers/workerInterface';
-import { normalizeComponentGeometry } from '../utils/circuitUtils';
+import { formatSiValue, normalizeComponentGeometry, parseSiValue } from '../utils/circuitUtils';
+import type { ComponentProperty } from '../types/circuit';
 import {
   Play,
   Pause,
@@ -104,6 +106,14 @@ const OSC_MEASUREMENT_OPTIONS: { key: OscMeasurementKey; label: string }[] = [
   { key: 'max', label: 'Max' }
 ];
 
+const BOARD_PRESETS = [
+  { id: 'custom', name: 'Personalizada', width: 16, height: 12 },
+  { id: 'small', name: 'Pequena', width: 8, height: 6 },
+  { id: 'arduino', name: 'Arduino UNO', width: 6.9, height: 5.3 },
+  { id: 'medium', name: 'Média', width: 12, height: 8 },
+  { id: 'large', name: 'Grande', width: 20, height: 15 }
+];
+
 export default function App() {
   const {
     theme,
@@ -147,9 +157,13 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'schematic' | 'pcb3d'>('schematic');
+  const [viewMode, setViewMode] = useState<'schematic' | 'pcbLayout' | 'pcb3d'>('schematic');
+  const [boardName, setBoardName] = useState('Board 1');
+  const [boardPreset, setBoardPreset] = useState('custom');
   const [boardColor, setBoardColor] = useState('#1b4d3e');
   const [boardDimensions, setBoardDimensions] = useState({ width: 16, height: 12 });
+  const [pcbLayout, setPcbLayout] = useState<Record<string, { x: number; y: number; rotation?: number }>>({});
+  const [pcbRoutes, setPcbRoutes] = useState<Record<string, { points: { x: number; y: number }[] }>>({});
   const [collapsedPanels, setCollapsedPanels] = useState({
     left: false,
     right: false,
@@ -175,6 +189,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [propertyDrafts, setPropertyDrafts] = useState<Record<string, string>>({});
   const isLocalAuthEnabled = import.meta.env.DEV;
   const lastAuthUserIdRef = useRef<string | null>(null);
 
@@ -268,6 +283,146 @@ export default function App() {
   const oscPendingTriggerTimeRef = useRef<number | null>(null);
   const oscLockedTriggerTimeRef = useRef<number | null>(null);
   const oscTriggerTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setPropertyDrafts({});
+  }, [selectedComponentId]);
+
+  const getBoardData = () => ({
+    name: boardName.trim() || 'Board 1',
+    width: boardDimensions.width,
+    height: boardDimensions.height,
+    color: boardColor
+  });
+
+  const getPropertyDraftKey = (componentId: string, propertyKey: string) => `${componentId}:${propertyKey}`;
+  const getPropertyInputValue = (componentId: string, propertyKey: string, property: ComponentProperty) => {
+    const draftKey = getPropertyDraftKey(componentId, propertyKey);
+    if (Object.prototype.hasOwnProperty.call(propertyDrafts, draftKey)) {
+      return propertyDrafts[draftKey];
+    }
+
+    if (propertyKey === 'capacitance' && typeof property.value === 'number') {
+      return formatSiValue(property.value, property.unit);
+    }
+
+    return String(property.value);
+  };
+  const updatePropertyInputValue = (
+    componentId: string,
+    propertyKey: string,
+    property: ComponentProperty,
+    rawValue: string
+  ) => {
+    if (propertyKey === 'capacitance') {
+      const draftKey = getPropertyDraftKey(componentId, propertyKey);
+      setPropertyDrafts(prev => ({ ...prev, [draftKey]: rawValue }));
+      return;
+    }
+
+    const val = property.type === 'number' ? parseSiValue(rawValue) : rawValue;
+    useStore.getState().updateComponentProperty(componentId, propertyKey, val);
+  };
+  const commitPropertyInputValue = (componentId: string, propertyKey: string) => {
+    const draftKey = getPropertyDraftKey(componentId, propertyKey);
+    const draft = propertyDrafts[draftKey];
+    if (draft === undefined) return;
+
+    const parsed = parseSiValue(draft);
+    setPropertyDrafts(prev => {
+      const next = { ...prev };
+      delete next[draftKey];
+      return next;
+    });
+
+    if (Number.isFinite(parsed)) {
+      useStore.getState().updateComponentProperty(componentId, propertyKey, parsed);
+    }
+  };
+
+  const createProjectData = () => ({
+    format: 'electronic-simulator-project',
+    version: '1.0.0',
+    project,
+    settings: { gridSize: 20, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep },
+    components,
+    wires,
+    texts,
+    viewport,
+    projectDevices,
+    board: getBoardData(),
+    pcbLayout,
+    pcbRoutes
+  });
+
+  const applyBoardFromProject = (projectData: any) => {
+    if (!projectData?.board) {
+      setBoardName(`${projectData?.project?.name || 'Board'} PCB`);
+      createBoardFromCircuit(projectData?.components || []);
+      setViewMode('schematic');
+      return;
+    }
+
+    setBoardName(projectData.board.name || 'Board 1');
+    setBoardColor(projectData.board.color || '#1b4d3e');
+    setBoardDimensions({
+      width: Number(projectData.board.width) || 16,
+      height: Number(projectData.board.height) || 12
+    });
+    setBoardPreset('custom');
+    setPcbLayout(projectData.pcbLayout || {});
+    setPcbRoutes(projectData.pcbRoutes || {});
+  };
+
+  const updateBoardDimension = (dimension: 'width' | 'height', valueMm: number) => {
+    const boundedMm = Math.max(20, Math.min(500, Number.isFinite(valueMm) ? valueMm : 50));
+    setBoardPreset('custom');
+    setBoardDimensions(prev => ({ ...prev, [dimension]: boundedMm / 10 }));
+  };
+
+  const applyBoardPreset = (presetId: string) => {
+    const preset = BOARD_PRESETS.find(item => item.id === presetId);
+    if (!preset) return;
+
+    setBoardPreset(presetId);
+    setBoardDimensions({ width: preset.width, height: preset.height });
+  };
+
+  const createBoardFromCircuit = (sourceComponents = components) => {
+    if (sourceComponents.length === 0) {
+      setBoardDimensions({ width: 10, height: 8 });
+      setPcbLayout({});
+      setPcbRoutes({});
+      setBoardPreset('custom');
+      setViewMode('pcb3d');
+      return;
+    }
+
+    const allX = sourceComponents.flatMap(comp => comp.terminals.length > 0 ? comp.terminals.map(term => term.x) : [comp.x]);
+    const allY = sourceComponents.flatMap(comp => comp.terminals.length > 0 ? comp.terminals.map(term => term.y) : [comp.y]);
+    const spanX = Math.max(...allX) - Math.min(...allX);
+    const spanY = Math.max(...allY) - Math.min(...allY);
+    const margin = 4;
+
+    setBoardDimensions({
+      width: Math.max(5, Math.ceil((spanX + margin) * 10) / 10),
+      height: Math.max(5, Math.ceil((spanY + margin) * 10) / 10)
+    });
+    setBoardPreset('custom');
+    setPcbRoutes({});
+    setPcbLayout(Object.fromEntries(sourceComponents.map(comp => {
+      const xValues = sourceComponents.flatMap(item => item.terminals.length > 0 ? item.terminals.map(term => term.x) : [item.x]);
+      const yValues = sourceComponents.flatMap(item => item.terminals.length > 0 ? item.terminals.map(term => term.y) : [item.y]);
+      const centerX = Math.min(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) / 2;
+      const centerY = Math.min(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) / 2;
+      return [comp.id, {
+        x: comp.x - centerX,
+        y: comp.y - centerY,
+        rotation: comp.rotation
+      }];
+    })));
+    setViewMode('pcbLayout');
+  };
 
   const zoomSchematicAtCenter = (zoomFactor: number) => {
     const canvas = document.querySelector<HTMLCanvasElement>('canvas');
@@ -563,23 +718,13 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       if (components.length > 0 || wires.length > 0) {
-        const projData = {
-          format: 'electronic-simulator-project',
-          version: '1.0.0',
-          project,
-          settings: { gridSize: 20, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep },
-          components,
-          wires,
-          texts,
-          viewport,
-          projectDevices
-        };
+        const projData = createProjectData();
         saveProject(projData, authSession?.id);
       }
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [components, wires, texts, viewport, project, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep, projectDevices, authSession?.id]);
+  }, [components, wires, texts, viewport, project, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep, projectDevices, boardName, boardColor, boardDimensions, pcbLayout, pcbRoutes, authSession?.id]);
 
   // Escuta os eventos da simulação física para popular o Osciloscópio
   useEffect(() => {
@@ -762,17 +907,7 @@ export default function App() {
 
   // Salvar projeto manualmente (Local + Nuvem Supabase)
   const handleSaveProject = async () => {
-    const projData = {
-      format: 'electronic-simulator-project',
-      version: '1.0.0',
-      project,
-      settings: { gridSize: 20, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep },
-      components,
-      wires,
-      texts,
-      viewport,
-      projectDevices
-    };
+    const projData = createProjectData();
     await saveProject(projData, authSession?.id);
     let msg = 'Projeto salvo no armazenamento local!';
 
@@ -800,6 +935,7 @@ export default function App() {
       ...projectCloud,
       components: updatedComponents
     });
+    applyBoardFromProject(projectCloud);
     setShowExamplesModal(false);
   };
 
@@ -831,6 +967,8 @@ export default function App() {
       viewport: { x: 10, y: 10, zoom: 1 },
       projectDevices: example.components.map(c => c.type).filter((val, i, arr) => arr.indexOf(val) === i)
     });
+    setBoardName(`${example.name} Board`);
+    setBoardPreset('custom');
     
     // Notifica o SimulationManager
     simulationManager.reset();
@@ -841,17 +979,7 @@ export default function App() {
 
   // Exportar circuito como arquivo JSON
   const handleExportJSON = () => {
-    const projData = {
-      format: 'electronic-simulator-project',
-      version: '1.0.0',
-      project,
-      settings: { gridSize: 20, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep },
-      components,
-      wires,
-      texts,
-      viewport,
-      projectDevices
-    };
+    const projData = createProjectData();
     const blob = new Blob([JSON.stringify(projData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -886,6 +1014,7 @@ export default function App() {
           viewport: parsed.viewport || viewport,
           projectDevices: parsed.projectDevices || comps.map((c: any) => c.type).filter((val: string, i: number, arr: string[]) => arr.indexOf(val) === i)
         });
+        applyBoardFromProject(parsed);
 
         simulationManager.reset();
         simulationManager.updateCircuit(comps, parsed.wires || []);
@@ -971,7 +1100,7 @@ export default function App() {
                           comp.desc.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = activeCategory === 'all' || comp.category === activeCategory;
     return matchesSearch && matchesCategory;
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
   const updateOscChannel = (channelKey: OscChannelKey, patch: Partial<OscChannelConfig>) => {
     setOscChannels(prev => ({
@@ -1840,7 +1969,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Visualização (Esquema vs Placa 3D) */}
+          {/* Visualização (Esquema vs Layout PCB vs Placa 3D) */}
           <div className="flex items-center bg-indigo-50 dark:bg-slate-950 rounded-xl p-1 border border-indigo-100 dark:border-slate-800 shadow-inner">
             <button
               onClick={() => setViewMode('schematic')}
@@ -1851,6 +1980,16 @@ export default function App() {
               }`}
             >
               Esquema (ISIS)
+            </button>
+            <button
+              onClick={() => setViewMode('pcbLayout')}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                viewMode === 'pcbLayout'
+                  ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm font-bold border border-slate-200/50 dark:border-slate-800/50'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+            >
+              Layout PCB
             </button>
             <button
               onClick={() => setViewMode('pcb3d')}
@@ -2006,7 +2145,14 @@ export default function App() {
                         Nenhum componente selecionado.<br/>Clique em <b>P</b> para escolher peças.
                       </div>
                     ) : (
-                      projectDevices.map(type => {
+                      projectDevices
+                        .slice()
+                        .sort((a, b) => {
+                          const nameA = componentLibrary.find(c => c.type === a)?.name ?? a;
+                          const nameB = componentLibrary.find(c => c.type === b)?.name ?? b;
+                          return nameA.localeCompare(nameB, 'pt-BR');
+                        })
+                        .map(type => {
                         const compDef = componentLibrary.find(c => c.type === type);
                         if (!compDef) return null;
                         
@@ -2043,21 +2189,46 @@ export default function App() {
               </>
             ) : (
               <div className="flex-1 overflow-y-auto p-4 space-y-5 text-slate-800 dark:text-slate-200 text-left">
-                {/* Tamanho da Placa */}
+                {/* Board Creator */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider">Dimensões da Placa</h4>
+                  <h4 className="text-xs font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider">Criar Board</h4>
                   
+                  <div className="flex flex-col space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Nome da Board</label>
+                    <input
+                      type="text"
+                      value={boardName}
+                      onChange={(e) => setBoardName(e.target.value)}
+                      className="text-xs px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                      placeholder="Board 1"
+                    />
+                  </div>
+
+                  <div className="flex flex-col space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Modelo</label>
+                    <select
+                      value={boardPreset}
+                      onChange={(e) => applyBoardPreset(e.target.value)}
+                      className="text-xs px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                    >
+                      {BOARD_PRESETS.map(preset => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.name} - {(preset.width * 10).toFixed(0)} x {(preset.height * 10).toFixed(0)} mm
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="flex flex-col space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase">Largura da Placa</label>
                     <div className="flex items-center space-x-2">
                       <input
                         type="number"
-                        min="50"
+                        min="20"
                         max="500"
                         value={boardDimensions.width * 10}
                         onChange={(e) => {
-                          const val = Math.max(50, Math.min(500, parseInt(e.target.value) || 50));
-                          setBoardDimensions({ ...boardDimensions, width: val / 10 });
+                          updateBoardDimension('width', parseInt(e.target.value) || 20);
                         }}
                         className="flex-1 text-xs px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                       />
@@ -2070,18 +2241,26 @@ export default function App() {
                     <div className="flex items-center space-x-2">
                       <input
                         type="number"
-                        min="50"
+                        min="20"
                         max="500"
                         value={boardDimensions.height * 10}
                         onChange={(e) => {
-                          const val = Math.max(50, Math.min(500, parseInt(e.target.value) || 50));
-                          setBoardDimensions({ ...boardDimensions, height: val / 10 });
+                          updateBoardDimension('height', parseInt(e.target.value) || 20);
                         }}
                         className="flex-1 text-xs px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                       />
                       <span className="text-xs font-bold text-slate-500">mm</span>
                     </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => createBoardFromCircuit()}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-all shadow-sm active:scale-[0.98]"
+                  >
+                    <Plus size={14} />
+                    <span>Criar Board pelo Circuito</span>
+                  </button>
                 </div>
 
                 {/* Resumo da Placa */}
@@ -2148,8 +2327,27 @@ export default function App() {
           <div className="flex-1 min-h-0 relative bg-slate-50 dark:bg-slate-950">
             {viewMode === 'schematic' ? (
               <CircuitCanvas />
+            ) : viewMode === 'pcbLayout' ? (
+              <PcbLayoutEditor
+                components={components}
+                wires={wires}
+                boardName={boardName}
+                boardDimensions={boardDimensions}
+                boardColor={boardColor}
+                layout={pcbLayout}
+                setLayout={setPcbLayout}
+                routes={pcbRoutes}
+                setRoutes={setPcbRoutes}
+              />
             ) : (
-              <Pcb3dViewer boardColor={boardColor} setBoardColor={setBoardColor} boardDimensions={boardDimensions} />
+              <Pcb3dViewer
+                boardName={boardName}
+                boardColor={boardColor}
+                setBoardColor={setBoardColor}
+                boardDimensions={boardDimensions}
+                pcbLayout={pcbLayout}
+                pcbRoutes={pcbRoutes}
+              />
             )}
           </div>
         </main>
@@ -3229,16 +3427,27 @@ export default function App() {
                             </select>
                           ) : (
                             <input
-                              type={prop.type === 'number' ? 'number' : 'text'}
-                              value={String(prop.value)}
+                              type={prop.type === 'number' && key !== 'capacitance' ? 'number' : 'text'}
+                              value={getPropertyInputValue(selectedComponent.id, key, prop)}
                               onChange={(e) => {
-                                const val = prop.type === 'number' ? parseFloat(e.target.value) : e.target.value;
-                                useStore.getState().updateComponentProperty(selectedComponent.id, key, val);
+                                updatePropertyInputValue(selectedComponent.id, key, prop, e.target.value);
                               }}
+                              onBlur={() => {
+                                if (key === 'capacitance') {
+                                  commitPropertyInputValue(selectedComponent.id, key);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (key === 'capacitance' && e.key === 'Enter') {
+                                  commitPropertyInputValue(selectedComponent.id, key);
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              placeholder={key === 'capacitance' ? 'ex: 470uF' : undefined}
                               className="flex-1 text-xs px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all font-mono"
                             />
                           )}
-                          {prop.unit && (
+                          {prop.unit && key !== 'capacitance' && (
                             <span className="text-xs font-mono font-bold text-slate-500 w-8">{prop.unit}</span>
                           )}
                         </div>
@@ -3442,7 +3651,7 @@ export default function App() {
           <span>🔍 {(viewport.zoom * 100).toFixed(0)}%</span>
         </div>
         <div className="status-item">
-          <span>{viewMode === 'schematic' ? '📋 Esquemático' : '🔲 PCB 3D'}</span>
+          <span>{viewMode === 'schematic' ? '📋 Esquemático' : (viewMode === 'pcbLayout' ? '🧭 Layout PCB' : '🔲 PCB 3D')}</span>
         </div>
         {oscWindowOpen && !oscWindowMinimized && (
           <div className="status-item">
@@ -3588,9 +3797,18 @@ export default function App() {
         onNewProject={() => {
           clearCircuit();
           setProjectName('Novo Circuito');
+          setBoardName('Board 1');
+          setBoardPreset('custom');
+          setBoardColor('#1b4d3e');
+          setBoardDimensions({ width: 16, height: 12 });
+          setPcbLayout({});
+          setPcbRoutes({});
         }}
         onLoadExample={(ex) => handleLoadExample(ex)}
-        onLoadProjectData={(data) => loadProject(data)}
+        onLoadProjectData={(data) => {
+          loadProject(data);
+          applyBoardFromProject(data);
+        }}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
         userName={authSession?.name || 'Engenheiro'}
