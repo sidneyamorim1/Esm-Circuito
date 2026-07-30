@@ -313,6 +313,19 @@
   animation: float 12s ease-in-out infinite;
 }
 
+@media (max-width: 640px) {
+  .login-bg::before {
+    background-image:
+      radial-gradient(ellipse 420px 420px at 20% 20%, rgba(99, 102, 241, 0.12), transparent),
+      radial-gradient(ellipse 360px 360px at 90% 70%, rgba(6, 182, 212, 0.08), transparent);
+  }
+
+  .floating-orb {
+    filter: blur(42px);
+    opacity: 0.55;
+  }
+}
+
 /* Scrollbar none utility */
 .scrollbar-none::-webkit-scrollbar {
   display: none;

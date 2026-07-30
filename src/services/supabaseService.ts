@@ -5,95 +5,61 @@ export interface AuthUserData {
   id: string;
   name: string;
   email: string;
-  role?: string;
+  role: 'user' | 'admin';
 }
+
+const EDGE_FUNCTION_UNAVAILABLE_ERROR =
+  'Função administrativa não publicada no Supabase. Publique a Edge Function admin-create-user antes de cadastrar usuários.';
 
 // ----------------------------------------------------
 // AUTENTICAÇÃO
 // ----------------------------------------------------
 
-export async function signUpUser(name: string, email: string, password: string, role: string = 'user'): Promise<{ user: AuthUserData | null; error: string | null }> {
+export async function signUpUser(name: string, email: string, password: string, role: 'user' | 'admin' = 'user'): Promise<{ user: AuthUserData | null; error: string | null }> {
   const client = supabase;
   if (!isSupabaseConfigured() || !client) {
     return { user: null, error: 'Supabase não está configurado. Verifique o arquivo .env.' };
   }
 
-  const { data: sessionData } = await client.auth.getSession();
-  const previousSession = sessionData.session;
-
-  const restorePreviousSession = async () => {
-    if (!previousSession) return;
-    try {
-      await client.auth.setSession({
-        access_token: previousSession.access_token,
-        refresh_token: previousSession.refresh_token
-      });
-    } catch (restoreError) {
-      console.warn('Não foi possível restaurar a sessão anterior após cadastro:', restoreError);
-    }
-  };
-
   try {
-    const { data, error } = await client.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name, role }
-      }
+    const { data, error } = await client.functions.invoke('admin-create-user', {
+      body: { name, email, password, role }
     });
 
-    await restorePreviousSession();
-
     if (error) {
+      if (error.message?.includes('Failed to send a request to the Edge Function')) {
+        return { user: null, error: EDGE_FUNCTION_UNAVAILABLE_ERROR };
+      }
       return { user: null, error: error.message };
     }
 
-    if (!data.user) {
-      return { user: null, error: 'Erro inesperado ao criar usuário.' };
+    if (!data?.success || !data?.user) {
+      return { user: null, error: data?.error || 'Erro inesperado ao criar usuário.' };
     }
 
-    const now = new Date().toISOString();
-    const { error: profileError } = await client
-      .from('profiles')
-      .upsert({
-        id: data.user.id,
-        email: data.user.email || email,
-        role,
-        created_at: now,
-        updated_at: now
-      }, { onConflict: 'id' });
-
-    if (profileError) {
-      console.warn('Usuário criado no Auth, mas a sincronização do profile falhou:', profileError);
-    }
-
-    const userData: AuthUserData = {
-      id: data.user.id,
-      name: data.user.user_metadata?.name || name,
-      email: data.user.email || email,
-      role: data.user.app_metadata?.role || data.user.user_metadata?.role || role
-    };
-
-    return { user: userData, error: null };
+    return { user: data.user as AuthUserData, error: null };
   } catch (err: any) {
-    await restorePreviousSession();
+    if (err.message?.includes('Failed to send a request to the Edge Function')) {
+      return { user: null, error: EDGE_FUNCTION_UNAVAILABLE_ERROR };
+    }
     return { user: null, error: err.message || 'Erro ao realizar cadastro.' };
   }
 }
 
-async function fetchUserRole(userId: string, defaultRole: string = 'user'): Promise<string> {
-  if (!isSupabaseConfigured() || !supabase) return defaultRole;
+async function fetchUserRole(userId: string, appMetadata?: Record<string, unknown>): Promise<'user' | 'admin'> {
+  if (!isSupabaseConfigured() || !supabase) return 'user';
   try {
     const { data } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', userId)
       .single();
-    if (data?.role) return data.role;
+    if (data?.role === 'admin') return 'admin';
   } catch {
     // fallback
   }
-  return defaultRole;
+  if (appMetadata?.role === 'admin') return 'admin';
+  return 'user';
 }
 
 export async function signInUser(email: string, password: string): Promise<{ user: AuthUserData | null; error: string | null }> {
@@ -115,10 +81,7 @@ export async function signInUser(email: string, password: string): Promise<{ use
       return { user: null, error: 'Usuário não encontrado.' };
     }
 
-    let userRole = data.user.app_metadata?.role || data.user.user_metadata?.role;
-    if (!userRole || userRole !== 'admin') {
-      userRole = await fetchUserRole(data.user.id, userRole || 'user');
-    }
+    const userRole = await fetchUserRole(data.user.id, data.user.app_metadata);
 
     const userData: AuthUserData = {
       id: data.user.id,
@@ -131,6 +94,21 @@ export async function signInUser(email: string, password: string): Promise<{ use
   } catch (err: any) {
     return { user: null, error: err.message || 'Erro ao realizar login.' };
   }
+}
+
+export async function requestPasswordReset(email: string, redirectTo?: string): Promise<{ success: boolean; error: string | null }> {
+  if (!isSupabaseConfigured() || !supabase) {
+    return { success: false, error: 'Supabase não está configurado. Verifique o arquivo .env.' };
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo
+  });
+
+  return {
+    success: !error,
+    error: error ? error.message : null
+  };
 }
 
 export async function signOutUser(): Promise<{ error: string | null }> {
@@ -150,10 +128,7 @@ export async function getCurrentUser(): Promise<AuthUserData | null> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return null;
 
-  let userRole = session.user.app_metadata?.role || session.user.user_metadata?.role;
-  if (!userRole || userRole !== 'admin') {
-    userRole = await fetchUserRole(session.user.id, userRole || 'user');
-  }
+  const userRole = await fetchUserRole(session.user.id, session.user.app_metadata);
 
   return {
     id: session.user.id,
@@ -170,11 +145,8 @@ export function onAuthStateChange(callback: (user: AuthUserData | null) => void)
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
     if (session?.user) {
-      callback({
-        id: session.user.id,
-        name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Usuário',
-        email: session.user.email || '',
-        role: session.user.app_metadata?.role || session.user.user_metadata?.role || 'user'
+      queueMicrotask(() => {
+        getCurrentUser().then(callback).catch(() => callback(null));
       });
     } else {
       callback(null);
@@ -188,6 +160,18 @@ export async function listUsersFromProfiles(): Promise<Array<{ id: string; email
   const client = supabase;
   if (!isSupabaseConfigured() || !client) return [];
   try {
+    const { data: functionData, error: functionError } = await client.functions.invoke('admin-list-users', {
+      method: 'GET'
+    });
+
+    if (!functionError && functionData?.success && Array.isArray(functionData.users)) {
+      return functionData.users;
+    }
+
+    if (functionError) {
+      console.error('Erro ao listar usuários pela Edge Function:', functionError);
+    }
+
     const { data, error } = await client
       .from('profiles')
       .select('id, email, role, created_at')

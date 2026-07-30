@@ -68,6 +68,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+UPDATE public.profiles SET role = 'user' WHERE role NOT IN ('user', 'admin');
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles
+  ADD CONSTRAINT profiles_role_check CHECK (role IN ('user', 'admin'));
+
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Usuários podem ler seus próprios perfis" ON public.profiles;
@@ -76,7 +81,8 @@ CREATE POLICY "Usuários podem ler seus próprios perfis"
   USING (auth.uid() = id);
 
 -- Função segura para verificar se o usuário autenticado é admin sem depender
--- das policies da própria tabela profiles.
+-- das policies da própria tabela profiles. Aceita profiles.role e app_metadata,
+-- mas nunca user_metadata, que pode ser alterado pelo próprio usuário.
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS boolean
 LANGUAGE sql
@@ -84,18 +90,18 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.profiles
-    WHERE id = auth.uid()
-      AND role = 'admin'
-  )
-  OR COALESCE(
-    auth.jwt() -> 'user_metadata' ->> 'role',
-    auth.jwt() -> 'app_metadata' ->> 'role'
-  ) = 'admin';
+  SELECT
+    COALESCE(auth.jwt() -> 'app_metadata' ->> 'role', '') = 'admin'
+    OR EXISTS (
+      SELECT 1
+      FROM public.profiles
+      WHERE id = auth.uid()
+        AND role = 'admin'
+    );
 $$;
 
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_admin() FROM anon;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
 
 DROP POLICY IF EXISTS "Admins podem ler todos os perfis" ON public.profiles;
@@ -119,7 +125,7 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.profiles (id, email, role)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_app_meta_data->>'role', 'user'))
+  VALUES (NEW.id, NEW.email, 'user')
   ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
   RETURN NEW;
 END;

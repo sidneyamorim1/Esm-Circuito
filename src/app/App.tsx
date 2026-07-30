@@ -41,7 +41,6 @@ import {
   Loader2,
   CheckCircle2,
   Cloud,
-  CloudOff,
   Mail,
   Lock,
   ShieldCheck,
@@ -56,6 +55,7 @@ import {
   signOutUser,
   getCurrentUser,
   onAuthStateChange,
+  requestPasswordReset,
   saveProjectToCloud,
   loadProjectFromCloud,
   listProjectsFromCloud,
@@ -89,26 +89,13 @@ interface OscChannelConfig {
   offset: number;
 }
 
-interface LocalAccount {
-  name: string;
-  email: string;
-  password: string;
-}
-
 interface AuthSession {
-  id?: string;
+  id: string;
   name: string;
   email: string;
-  role?: string;
+  role: 'user' | 'admin';
 }
 
-const ACCOUNTS_STORAGE_KEY = 'faustad-accounts';
-const SESSION_STORAGE_KEY = 'faustad-session';
-const DEMO_ACCOUNT: AuthSession = {
-  name: 'Demo',
-  email: 'demo@faustad.local'
-};
-const DEMO_PASSWORD = '123456';
 const OSC_MEASUREMENT_OPTIONS: { key: OscMeasurementKey; label: string }[] = [
   { key: 'last', label: 'Atual' },
   { key: 'peakToPeak', label: 'Vpp' },
@@ -185,30 +172,24 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [passwordResetLoading, setPasswordResetLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
-  const [authSession, setAuthSession] = useState<AuthSession | null>(() => {
-    if (typeof localStorage === 'undefined') return null;
-    const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!stored) return null;
-    try {
-      return JSON.parse(stored) as AuthSession;
-    } catch {
-      return null;
-    }
-  });
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
 
   useEffect(() => {
     if (isSupabaseConfigured()) {
       getCurrentUser().then((user) => {
         if (user) {
-          persistSession({ id: user.id, name: user.name, email: user.email, role: user.role });
+          setAuthSession({ id: user.id, name: user.name, email: user.email, role: user.role });
         }
       });
 
       const { unsubscribe } = onAuthStateChange((user) => {
         if (user) {
           setAuthSession({ id: user.id, name: user.name, email: user.email, role: user.role });
+        } else {
+          setAuthSession(null);
         }
       });
       return () => unsubscribe();
@@ -1141,22 +1122,8 @@ export default function App() {
     return path;
   };
 
-  const getStoredAccounts = (): LocalAccount[] => {
-    if (typeof localStorage === 'undefined') return [];
-    const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    if (!stored) return [];
-    try {
-      return JSON.parse(stored) as LocalAccount[];
-    } catch {
-      return [];
-    }
-  };
-
   const persistSession = (session: AuthSession) => {
     setAuthSession(session);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-    }
   };
 
   const resetAuthForm = () => {
@@ -1175,47 +1142,62 @@ export default function App() {
       return;
     }
 
-    if (email === DEMO_ACCOUNT.email && password === DEMO_PASSWORD) {
-      persistSession(DEMO_ACCOUNT);
-      resetAuthForm();
-      return;
-    }
-
     setAuthLoading(true);
     setAuthError('');
     setAuthSuccess('');
 
-    if (isSupabaseConfigured()) {
-      const { user, error } = await signInUser(email, password);
+    if (!isSupabaseConfigured()) {
       setAuthLoading(false);
-
-      if (error) {
-        if (error.includes('Invalid login credentials')) {
-          setAuthError('E-mail ou senha incorretos.');
-        } else {
-          setAuthError(error);
-        }
-        return;
-      }
-
-      if (user) {
-        persistSession({ id: user.id, name: user.name, email: user.email, role: user.role });
-        resetAuthForm();
-        return;
-      }
-    }
-
-    // Fallback local
-    const account = getStoredAccounts().find(item => item.email === email && item.password === password);
-    setAuthLoading(false);
-
-    if (!account) {
-      setAuthError('E-mail ou senha inválidos.');
+      setAuthError('A autenticação não está configurada. Contate o administrador.');
       return;
     }
 
-    persistSession({ name: account.name, email: account.email });
-    resetAuthForm();
+    const { user, error } = await signInUser(email, password);
+    setAuthLoading(false);
+
+    if (error) {
+      setAuthError(error.includes('Invalid login credentials') ? 'E-mail ou senha incorretos.' : error);
+      return;
+    }
+
+    if (user) {
+      persistSession({ id: user.id, name: user.name, email: user.email, role: user.role });
+      resetAuthForm();
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    const email = authEmail.trim().toLowerCase();
+
+    if (!email) {
+      setAuthError('Informe seu e-mail para recuperar a senha.');
+      return;
+    }
+
+    if (!email.includes('@') || !email.includes('.')) {
+      setAuthError('Informe um e-mail válido para recuperar a senha.');
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      setAuthError('A autenticação não está configurada. Contate o administrador.');
+      return;
+    }
+
+    setPasswordResetLoading(true);
+    setAuthError('');
+    setAuthSuccess('');
+
+    const redirectTo = `${window.location.origin}/`;
+    const { success, error } = await requestPasswordReset(email, redirectTo);
+    setPasswordResetLoading(false);
+
+    if (!success) {
+      setAuthError(error || 'Não foi possível enviar o e-mail de recuperação.');
+      return;
+    }
+
+    setAuthSuccess('Enviamos um link de recuperação para o seu e-mail.');
   };
 
   const handleLogout = async () => {
@@ -1223,20 +1205,13 @@ export default function App() {
       await signOutUser();
     }
     setAuthSession(null);
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
-    }
-  };
-
-  const handleDemoLogin = () => {
-    persistSession(DEMO_ACCOUNT);
-    resetAuthForm();
+    setShowAdminModal(false);
   };
 
   if (!authSession) {
     const isCloud = isSupabaseConfigured();
     return (
-      <div className="min-h-screen login-bg text-slate-100 flex items-center justify-center px-4 py-8 relative">
+      <div className="h-screen login-bg text-slate-100 flex items-start sm:items-center justify-center px-3 sm:px-4 py-3 sm:py-8 relative overflow-y-auto">
         {/* Animated floating orbs */}
         <div className="floating-orb" style={{ width: 400, height: 400, top: '10%', left: '-5%', background: 'rgba(99, 102, 241, 0.15)' }} />
         <div className="floating-orb" style={{ width: 300, height: 300, bottom: '5%', right: '-3%', background: 'rgba(6, 182, 212, 0.1)', animationDelay: '4s' }} />
@@ -1245,73 +1220,60 @@ export default function App() {
         {/* Circuit grid lines */}
         <div className="login-circuit-lines" />
 
-        <div className="relative z-10 w-full max-w-5xl grid lg:grid-cols-[1.1fr_0.9fr] overflow-hidden rounded-2xl glass-card shadow-2xl">
+        <div className="relative z-10 w-full max-w-5xl grid lg:grid-cols-[1.1fr_0.9fr] overflow-hidden rounded-xl sm:rounded-2xl glass-card shadow-2xl my-auto">
           {/* Left Panel — Brand & Features */}
-          <section className="p-8 sm:p-10 flex flex-col justify-between gap-10 border-b lg:border-b-0 lg:border-r border-white/5">
+          <section className="p-5 sm:p-10 flex flex-col justify-between gap-5 sm:gap-10 border-b lg:border-b-0 lg:border-r border-white/5">
             <div>
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3 mb-5 sm:mb-8">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-cyan-500 text-white font-black text-xl flex items-center justify-center rounded-xl shadow-lg shadow-indigo-500/20">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 bg-gradient-to-br from-indigo-500 to-cyan-500 text-white font-black text-lg sm:text-xl flex items-center justify-center rounded-xl shadow-lg shadow-indigo-500/20 shrink-0">
                     E
                   </div>
-                  <div>
-                    <h1 className="text-xl font-black tracking-tight">ESM Circuito</h1>
+                  <div className="min-w-0">
+                    <h1 className="text-lg sm:text-xl font-black tracking-tight">ESM Circuito</h1>
                     <p className="text-xs text-slate-400">Simulador Eletrônico & PCB</p>
                   </div>
                 </div>
-
-                {/* Badge Status do Supabase Cloud */}
-                <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${isCloud ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
-                  {isCloud ? <Cloud size={14} /> : <CloudOff size={14} />}
-                  <span>{isCloud ? 'Supabase Conectado' : 'Modo Offline'}</span>
-                </div>
               </div>
 
-              <h2 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight max-w-lg">
+              <h2 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight max-w-lg">
                 <span className="gradient-text">Projete, simule</span> e visualize seus circuitos em tempo real.
               </h2>
-              <p className="mt-5 text-sm leading-6 text-slate-400 max-w-xl">
+              <p className="mt-3 sm:mt-5 text-xs sm:text-sm leading-5 sm:leading-6 text-slate-400 max-w-xl">
                 Plataforma completa com editor esquemático, simulação SPICE, osciloscópio digital de 2 canais, visualização 3D de PCB e salvamento no banco Supabase.
               </p>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-3 text-xs text-slate-300">
-              <div className="feature-card rounded-xl p-4">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/15 flex items-center justify-center mb-2.5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs text-slate-300">
+              <div className="feature-card rounded-xl p-3 sm:p-4">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/15 flex items-center justify-center mb-2 sm:mb-2.5">
                   <TrendingUp size={16} className="text-indigo-400" />
                 </div>
-                <div className="font-bold text-white mb-1">Simulação SPICE</div>
-                <p className="text-slate-400 text-[11px] leading-relaxed">Análise transiente em tempo real com osciloscópio e medições.</p>
+                <div className="font-bold text-white text-[11px] sm:text-xs leading-tight mb-1">Simulação SPICE</div>
+                <p className="hidden sm:block text-slate-400 text-[11px] leading-relaxed">Análise transiente em tempo real com osciloscópio e medições.</p>
               </div>
-              <div className="feature-card rounded-xl p-4">
-                <div className="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center mb-2.5">
+              <div className="feature-card rounded-xl p-3 sm:p-4">
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/15 flex items-center justify-center mb-2 sm:mb-2.5">
                   <Grid size={16} className="text-cyan-400" />
                 </div>
-                <div className="font-bold text-white mb-1">PCB 3D</div>
-                <p className="text-slate-400 text-[11px] leading-relaxed">Visualize sua placa de circuito impresso em 3 dimensões.</p>
-              </div>
-              <div className="feature-card rounded-xl p-4">
-                <div className="w-8 h-8 rounded-lg bg-violet-500/15 flex items-center justify-center mb-2.5">
-                  <Cloud size={16} className="text-violet-400" />
-                </div>
-                <div className="font-bold text-white mb-1">Supabase Cloud</div>
-                <p className="text-slate-400 text-[11px] leading-relaxed">Sincronização instantânea na nuvem.</p>
+                <div className="font-bold text-white text-[11px] sm:text-xs leading-tight mb-1">PCB 3D</div>
+                <p className="hidden sm:block text-slate-400 text-[11px] leading-relaxed">Visualize sua placa de circuito impresso em 3 dimensões.</p>
               </div>
             </div>
           </section>
 
           {/* Right Panel — Auth Form (Acesso Restrito - Login) */}
-          <section className="p-6 sm:p-8 flex flex-col justify-center">
-            <div className="mb-6">
+          <section className="p-5 sm:p-8 flex flex-col justify-center">
+            <div className="mb-5 sm:mb-6">
               <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase tracking-wider mb-1">
                 <LogIn size={16} />
                 <span>Acesso Restrito</span>
               </div>
-              <h3 className="text-2xl font-black text-white tracking-tight">Entrar na Plataforma</h3>
+              <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">Entrar na Plataforma</h3>
               <p className="text-xs text-slate-400 mt-1">Informe suas credenciais para acessar o simulador de circuitos.</p>
             </div>
 
-            <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-3 sm:space-y-4">
               <div>
                 <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-1.5">
                   Endereço de E-mail
@@ -1358,6 +1320,17 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  disabled={authLoading || passwordResetLoading || !isCloud}
+                  className="text-xs font-semibold text-indigo-300 hover:text-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {passwordResetLoading ? 'Enviando recuperação...' : 'Esqueci minha senha'}
+                </button>
+              </div>
+
               {authSuccess && (
                 <div className="flex items-start gap-2.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 px-3.5 py-3 text-xs font-medium rounded-xl">
                   <CheckCircle2 size={16} className="text-emerald-400 shrink-0 mt-0.5" />
@@ -1375,7 +1348,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleLogin}
-                disabled={authLoading}
+                disabled={authLoading || !isCloud}
                 className="w-full bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-black py-3 text-sm rounded-xl transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/35 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {authLoading ? (
@@ -1388,18 +1361,6 @@ export default function App() {
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={authLoading}
-                className="w-full border border-white/10 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-slate-300 hover:text-white font-bold py-2.5 text-sm rounded-xl transition-all flex items-center justify-center gap-2"
-              >
-                ⚡ Entrar como Demo (Modo Rápido)
-              </button>
-
-              <p className="text-[11px] text-slate-500 text-center">
-                Novos cadastros de usuários são realizados diretamente no painel administrativo.
-              </p>
             </form>
           </section>
         </div>
@@ -1759,7 +1720,7 @@ export default function App() {
           </button>
 
           {/* Painel Admin */}
-          {authSession && (
+          {authSession.role === 'admin' && (
             <button
               onClick={() => setShowAdminModal(true)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-all shadow-sm"
@@ -3389,7 +3350,9 @@ export default function App() {
       )}
 
       {/* --- MODAL DO PAINEL ADMIN --- */}
-      <AdminModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} />
+      {authSession.role === 'admin' && (
+        <AdminModal isOpen={showAdminModal} onClose={() => setShowAdminModal(false)} />
+      )}
 
       {/* --- MODAL DO HUB DE PROJETOS E BOAS-VINDAS --- */}
       <ProjectsHubModal

@@ -3,7 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS'
+  'Access-Control-Allow-Methods': 'GET, OPTIONS'
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  if (req.method !== 'POST') {
+  if (req.method !== 'GET') {
     return jsonResponse({ success: false, error: 'Método não permitido.' }, 405);
   }
 
@@ -43,67 +43,48 @@ Deno.serve(async (req) => {
   }
 
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: {
-      headers: {
-        Authorization: authHeader
-      }
-    }
+    global: { headers: { Authorization: authHeader } }
   });
+  const { data: callerData, error: callerError } = await userClient.auth.getUser();
 
-  const { data: userData, error: userError } = await userClient.auth.getUser();
-  if (userError || !userData.user) {
+  if (callerError || !callerData.user) {
     return jsonResponse({ success: false, error: 'Sessão inválida.' }, 401);
   }
 
   const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
+    auth: { autoRefreshToken: false, persistSession: false }
   });
 
-  const { data: profile, error: profileError } = await adminClient
+  const { data: callerProfile, error: profileError } = await adminClient
     .from('profiles')
     .select('role')
-    .eq('id', userData.user.id)
+    .eq('id', callerData.user.id)
     .maybeSingle();
 
   if (profileError) {
     return jsonResponse({ success: false, error: 'Não foi possível validar permissões.' }, 500);
   }
 
-  if (!isAdminUser(userData.user, profile)) {
-    return jsonResponse({ success: false, error: 'Apenas administradores podem alterar senhas.' }, 403);
+  if (!isAdminUser(callerData.user, callerProfile)) {
+    return jsonResponse({ success: false, error: 'Apenas administradores podem listar usuários.' }, 403);
   }
 
-  const body = await req.json().catch(() => null);
-  const userId = String(body?.userId || '').trim();
-  const password = String(body?.password || '').trim();
+  const { data, error } = await adminClient
+    .from('profiles')
+    .select('id, email, role, created_at')
+    .order('created_at', { ascending: false });
 
-  if (!userId || !password) {
-    return jsonResponse({ success: false, error: 'Informe usuário e nova senha.' }, 400);
-  }
-
-  if (password.length < 6) {
-    return jsonResponse({ success: false, error: 'A senha deve ter pelo menos 6 caracteres.' }, 400);
-  }
-
-  const { data: updatedUser, error: updateError } = await adminClient.auth.admin.updateUserById(userId, {
-    password
-  });
-
-  if (updateError || !updatedUser.user) {
-    return jsonResponse({
-      success: false,
-      error: updateError?.message || 'Não foi possível atualizar a senha.'
-    }, 400);
+  if (error) {
+    return jsonResponse({ success: false, error: 'Não foi possível listar usuários.' }, 500);
   }
 
   return jsonResponse({
     success: true,
-    user: {
-      id: updatedUser.user.id,
-      email: updatedUser.user.email
-    }
+    users: (data || []).map((item) => ({
+      id: item.id,
+      email: item.email,
+      role: item.role || 'user',
+      createdAt: item.created_at
+    }))
   });
 });
