@@ -596,10 +596,6 @@ export default function CircuitCanvas() {
     const comp = components.find(c => c.id === compId);
     if (!comp) return;
     updateComponentRotation(compId, 90);
-    const updated = updateComponentTerminals({ ...comp, rotation: (comp.rotation + 90) % 360 });
-    useStore.setState({
-      components: components.map(c => c.id === compId ? updated : c)
-    });
     setContextMenu(null);
   };
 
@@ -1331,14 +1327,6 @@ export default function CircuitCanvas() {
         }
 
         updateComponentPosition(draggedComponentId, targetX, targetY);
-        
-        const comp = components.find(c => c.id === draggedComponentId);
-        if (comp) {
-          const updated = updateComponentTerminals({ ...comp, x: targetX, y: targetY });
-          useStore.setState({
-            components: components.map(c => c.id === draggedComponentId ? updated : c)
-          });
-        }
       }
     } else if (draggedWireId) {
       const wire = wires.find(w => w.id === draggedWireId);
@@ -1524,40 +1512,18 @@ export default function CircuitCanvas() {
       if ((e.key.toLowerCase() === 'r' || e.key === '+') && selectedComponentId) {
         e.preventDefault();
         updateComponentRotation(selectedComponentId, 90);
-        
-        const comp = components.find(c => c.id === selectedComponentId);
-        if (comp) {
-          const updated = updateComponentTerminals({ ...comp, rotation: (comp.rotation + 90) % 360 });
-          useStore.setState({
-            components: components.map(c => c.id === selectedComponentId ? updated : c)
-          });
-        }
       }
 
       // Espelhamento X (tecla X)
       if (e.key.toLowerCase() === 'x' && selectedComponentId) {
         e.preventDefault();
         toggleComponentMirrorX(selectedComponentId);
-        const comp = components.find(c => c.id === selectedComponentId);
-        if (comp) {
-          const updated = updateComponentTerminals({ ...comp, mirrorX: !comp.mirrorX });
-          useStore.setState({
-            components: components.map(c => c.id === selectedComponentId ? updated : c)
-          });
-        }
       }
 
       // Espelhamento Y (tecla Y)
       if (e.key.toLowerCase() === 'y' && selectedComponentId) {
         e.preventDefault();
         toggleComponentMirrorY(selectedComponentId);
-        const comp = components.find(c => c.id === selectedComponentId);
-        if (comp) {
-          const updated = updateComponentTerminals({ ...comp, mirrorY: !comp.mirrorY });
-          useStore.setState({
-            components: components.map(c => c.id === selectedComponentId ? updated : c)
-          });
-        }
       }
 
       // Ctrl + A (Selecionar Tudo)
@@ -1771,13 +1737,6 @@ export default function CircuitCanvas() {
                 <button
                   onClick={() => {
                     toggleComponentMirrorX(contextMenu.componentId);
-                    const comp = components.find(c => c.id === contextMenu.componentId);
-                    if (comp) {
-                      const updated = updateComponentTerminals({ ...comp, mirrorX: !comp.mirrorX });
-                      useStore.setState({
-                        components: components.map(c => c.id === contextMenu.componentId ? updated : c)
-                      });
-                    }
                     setContextMenu(null);
                   }}
                   className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
@@ -1788,13 +1747,6 @@ export default function CircuitCanvas() {
                 <button
                   onClick={() => {
                     toggleComponentMirrorY(contextMenu.componentId);
-                    const comp = components.find(c => c.id === contextMenu.componentId);
-                    if (comp) {
-                      const updated = updateComponentTerminals({ ...comp, mirrorY: !comp.mirrorY });
-                      useStore.setState({
-                        components: components.map(c => c.id === contextMenu.componentId ? updated : c)
-                      });
-                    }
                     setContextMenu(null);
                   }}
                   className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
