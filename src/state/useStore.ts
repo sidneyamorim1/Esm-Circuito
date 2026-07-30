@@ -3,6 +3,10 @@ import type { CircuitComponent, CircuitWire, CircuitText, Viewport, ProjectMetad
 import { normalizeComponentGeometry, updateComponentTerminals } from '../utils/circuitUtils';
 
 export type ToolType = 'select' | 'wire' | 'delete' | string;
+export interface PasteResult {
+  componentIds: string[];
+  wireIds: string[];
+}
 
 interface CircuitStore {
   // Configurações Globais / Temas
@@ -84,7 +88,8 @@ interface CircuitStore {
   // Área de Transferência e Duplicação
   clipboard: { components: CircuitComponent[]; wires: CircuitWire[] } | null;
   copySelection: () => void;
-  pasteSelection: (targetGridPosition?: { x: number; y: number }) => void;
+  copyItems: (componentIds: string[], wireIds?: string[]) => void;
+  pasteSelection: (targetGridPosition?: { x: number; y: number }) => PasteResult | null;
   duplicateSelection: () => void;
 }
 
@@ -230,7 +235,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
     get().pushHistory();
     set((state) => ({
       components: state.components.map((c) =>
-        c.id === id ? updateComponentTerminals({ ...c, rotation: (c.rotation + deltaRotation) % 360 }) : c
+        c.id === id ? updateComponentTerminals({ ...c, rotation: (((c.rotation + deltaRotation) % 360) + 360) % 360 }) : c
       ),
       project: { ...state.project, updatedAt: new Date().toISOString() }
     }));
@@ -454,39 +459,46 @@ export const useStore = create<CircuitStore>((set, get) => ({
   // Área de Transferência & Duplicação
   clipboard: null,
   copySelection: () => {
-    const { selectedComponentId, selectedWireId, components, wires } = get();
-    if (!selectedComponentId && !selectedWireId) return;
+    const { selectedComponentId, selectedWireId } = get();
+    get().copyItems(
+      selectedComponentId ? [selectedComponentId] : [],
+      selectedWireId ? [selectedWireId] : []
+    );
+  },
+  copyItems: (componentIds, wireIds = []) => {
+    const { components, wires } = get();
+    const selectedComponentIds = new Set(componentIds);
+    const selectedWireIds = new Set(wireIds);
 
-    if (selectedComponentId) {
-      const comp = components.find(c => c.id === selectedComponentId);
-      if (!comp) return;
+    if (selectedComponentIds.size === 0 && selectedWireIds.size === 0) return;
 
-      const attachedWires = wires.filter(w => w.from.componentId === comp.id && w.to.componentId === comp.id);
-      set({
-        clipboard: {
-          components: [JSON.parse(JSON.stringify(comp))],
-          wires: JSON.parse(JSON.stringify(attachedWires))
-        }
-      });
-    } else if (selectedWireId) {
-      const wire = wires.find(w => w.id === selectedWireId);
-      if (!wire) return;
-      set({
-        clipboard: {
-          components: [],
-          wires: [JSON.parse(JSON.stringify(wire))]
-        }
-      });
-    }
+    const copiedComponents = components
+      .filter(comp => selectedComponentIds.has(comp.id))
+      .map(comp => JSON.parse(JSON.stringify(comp)));
+
+    const copiedWires = wires
+      .filter(wire =>
+        selectedWireIds.has(wire.id) ||
+        (selectedComponentIds.has(wire.from.componentId) && selectedComponentIds.has(wire.to.componentId))
+      )
+      .map(wire => JSON.parse(JSON.stringify(wire)));
+
+    set({
+      clipboard: {
+        components: copiedComponents,
+        wires: copiedWires
+      }
+    });
   },
   pasteSelection: (targetGridPosition) => {
     const { clipboard } = get();
-    if (!clipboard || (clipboard.components.length === 0 && clipboard.wires.length === 0)) return;
+    if (!clipboard || (clipboard.components.length === 0 && clipboard.wires.length === 0)) return null;
 
     get().pushHistory();
 
     const idMap: Record<string, string> = {};
     const newComponents: CircuitComponent[] = [];
+    const newComponentIds: string[] = [];
     const anchorComponent = clipboard.components[0];
     const offsetX = targetGridPosition && anchorComponent ? targetGridPosition.x - anchorComponent.x : 3;
     const offsetY = targetGridPosition && anchorComponent ? targetGridPosition.y - anchorComponent.y : 3;
@@ -496,6 +508,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
     clipboard.components.forEach(comp => {
       const newId = `${comp.type}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 5)}`;
       idMap[comp.id] = newId;
+      newComponentIds.push(newId);
 
       const newX = comp.x + offsetX;
       const newY = comp.y + offsetY;
@@ -518,6 +531,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
 
     // Copia fios internos entre os componentes copiados
     const newWires: CircuitWire[] = [];
+    const newWireIds: string[] = [];
     clipboard.wires.forEach(wire => {
       const newFromId = idMap[wire.from.componentId] || wire.from.componentId;
       const newToId = idMap[wire.to.componentId] || wire.to.componentId;
@@ -532,6 +546,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
           : wire.routePoints
       };
 
+      newWireIds.push(newWire.id);
       newWires.push(newWire);
     });
 
@@ -543,6 +558,11 @@ export const useStore = create<CircuitStore>((set, get) => ({
       selectedComponentId: lastNewCompId || state.selectedComponentId,
       project: { ...state.project, updatedAt: new Date().toISOString() }
     }));
+
+    return {
+      componentIds: newComponentIds,
+      wireIds: newWireIds
+    };
   },
   duplicateSelection: () => {
     get().copySelection();

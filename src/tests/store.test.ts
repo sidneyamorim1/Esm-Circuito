@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useStore } from '../state/useStore';
-import type { CircuitComponent } from '../types/circuit';
+import type { CircuitComponent, CircuitWire } from '../types/circuit';
 
 describe('Zustand Circuit Store', () => {
   beforeEach(() => {
@@ -128,6 +128,88 @@ describe('Zustand Circuit Store', () => {
     expect(copyComp.x).toBe(13); // 10 + 3
     expect(copyComp.y).toBe(13); // 10 + 3
     expect(copyComp.name).toContain('Copia');
+  });
+
+  it('deve copiar e colar seleções múltiplas com fios internos', () => {
+    const state = useStore.getState();
+
+    const resistorA: CircuitComponent = {
+      id: 'resistor-a',
+      type: 'resistor',
+      name: 'Resistor A',
+      x: 10,
+      y: 10,
+      rotation: 0,
+      properties: {},
+      terminals: [
+        { id: 't1', relX: -2, relY: 0, x: 8, y: 10 },
+        { id: 't2', relX: 2, relY: 0, x: 12, y: 10 }
+      ]
+    };
+    const resistorB: CircuitComponent = {
+      id: 'resistor-b',
+      type: 'resistor',
+      name: 'Resistor B',
+      x: 16,
+      y: 10,
+      rotation: 0,
+      properties: {},
+      terminals: [
+        { id: 't1', relX: -2, relY: 0, x: 14, y: 10 },
+        { id: 't2', relX: 2, relY: 0, x: 18, y: 10 }
+      ]
+    };
+    const wire: CircuitWire = {
+      id: 'wire-a-b',
+      from: { componentId: 'resistor-a', terminalId: 't2' },
+      to: { componentId: 'resistor-b', terminalId: 't1' }
+    };
+
+    state.addComponent(resistorA);
+    state.addComponent(resistorB);
+    state.addWire(wire);
+    state.copyItems(['resistor-a', 'resistor-b']);
+    state.pasteSelection({ x: 30, y: 25 });
+
+    const next = useStore.getState();
+    expect(next.components.length).toBe(4);
+    expect(next.wires.length).toBe(2);
+
+    const pasted = next.components.slice(2);
+    expect(pasted[0]).toMatchObject({ x: 30, y: 25 });
+    expect(pasted[1]).toMatchObject({ x: 36, y: 25 });
+
+    const pastedWire = next.wires[1];
+    expect(pastedWire.from.componentId).toBe(pasted[0].id);
+    expect(pastedWire.to.componentId).toBe(pasted[1].id);
+  });
+
+  it('deve girar nos sentidos horario, anti-horario e 180 graus', () => {
+    const state = useStore.getState();
+
+    const resistor: CircuitComponent = {
+      id: 'resistor-rotate',
+      type: 'resistor',
+      name: 'Resistor Rotate',
+      x: 10,
+      y: 10,
+      rotation: 0,
+      properties: {},
+      terminals: [
+        { id: 't1', relX: -2, relY: 0, x: 8, y: 10 },
+        { id: 't2', relX: 2, relY: 0, x: 12, y: 10 }
+      ]
+    };
+
+    state.addComponent(resistor);
+    state.updateComponentRotation('resistor-rotate', -90);
+    expect(useStore.getState().components[0].rotation).toBe(270);
+
+    state.updateComponentRotation('resistor-rotate', 180);
+    expect(useStore.getState().components[0].rotation).toBe(90);
+
+    state.updateComponentRotation('resistor-rotate', 90);
+    expect(useStore.getState().components[0].rotation).toBe(180);
   });
 
   it('deve colar componente na posição do cursor mantendo terminais alinhados', () => {

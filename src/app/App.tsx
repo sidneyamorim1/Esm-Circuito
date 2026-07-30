@@ -142,10 +142,7 @@ export default function App() {
     removeWire,
     projectDevices,
     addProjectDevice,
-    removeProjectDevice,
-    copySelection,
-    pasteSelection,
-    duplicateSelection
+    removeProjectDevice
   } = useStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -533,7 +530,7 @@ export default function App() {
     }
   }, [theme]);
 
-  // Atalhos Globais de Teclado (Ctrl+C, Ctrl+V, Ctrl+D)
+  // Atalhos globais que não dependem da seleção múltipla local do canvas.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
@@ -545,16 +542,7 @@ export default function App() {
 
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
-      if (isCtrlOrCmd && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        copySelection();
-      } else if (isCtrlOrCmd && e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        pasteSelection();
-      } else if (isCtrlOrCmd && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        duplicateSelection();
-      } else if (isCtrlOrCmd && e.key.toLowerCase() === 'z') {
+      if (isCtrlOrCmd && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) redo();
         else undo();
@@ -569,7 +557,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [copySelection, pasteSelection, duplicateSelection, undo, redo, selectedComponentId, selectedWireId, removeComponent, removeWire]);
+  }, [undo, redo, selectedComponentId, selectedWireId, removeComponent, removeWire]);
 
   // Autosave a cada 10 segundos se houver alterações
   useEffect(() => {

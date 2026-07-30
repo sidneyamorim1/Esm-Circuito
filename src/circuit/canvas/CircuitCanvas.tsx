@@ -50,9 +50,8 @@ export default function CircuitCanvas() {
     redo,
     pushHistory,
     clipboard: storeClipboard,
-    copySelection: copyStoreSelection,
-    pasteSelection: pasteStoreSelection,
-    duplicateSelection: duplicateStoreSelection
+    copyItems: copyStoreItems,
+    pasteSelection: pasteStoreSelection
   } = useStore();
 
   // Estados locais para interações
@@ -592,12 +591,55 @@ export default function CircuitCanvas() {
   };
 
   // Funções para ações do Menu de Contexto
-  const handleRotateAction = (compId: string) => {
+  const handleRotateAction = (compId: string, deltaRotation: number = 90) => {
     const comp = components.find(c => c.id === compId);
     if (!comp) return;
-    updateComponentRotation(compId, 90);
+    updateComponentRotation(compId, deltaRotation);
     setContextMenu(null);
   };
+
+  const getActiveSelection = () => {
+    const componentIds = selectedComponentIds.length > 0
+      ? selectedComponentIds
+      : (selectedComponentId ? [selectedComponentId] : []);
+    const wireIds = selectedWireIds.length > 0
+      ? selectedWireIds
+      : (selectedWireId ? [selectedWireId] : []);
+
+    return { componentIds, wireIds };
+  };
+
+  const copyActiveSelection = () => {
+    const { componentIds, wireIds } = getActiveSelection();
+    if (componentIds.length > 0 || wireIds.length > 0) {
+      copyStoreItems(componentIds, wireIds);
+    }
+  };
+
+  const duplicateActiveSelection = () => {
+    copyActiveSelection();
+    const pasted = pasteStoreSelection();
+    if (!pasted) return;
+
+    setSelectedComponentIds(pasted.componentIds);
+    setSelectedWireIds(pasted.wireIds);
+    setSelectedComponentId(pasted.componentIds.length === 1 ? pasted.componentIds[0] : null);
+    setSelectedWireId(pasted.componentIds.length === 0 && pasted.wireIds.length === 1 ? pasted.wireIds[0] : null);
+  };
+
+  const pasteActiveClipboard = (targetGridPosition?: { x: number; y: number }) => {
+    const pasted = pasteStoreSelection(targetGridPosition);
+    if (!pasted) return false;
+
+    setSelectedComponentIds(pasted.componentIds);
+    setSelectedWireIds(pasted.wireIds);
+    setSelectedComponentId(pasted.componentIds.length === 1 ? pasted.componentIds[0] : null);
+    setSelectedWireId(pasted.componentIds.length === 0 && pasted.wireIds.length === 1 ? pasted.wireIds[0] : null);
+    return true;
+  };
+
+  const isContextComponentInMultiSelection = (componentId: string) =>
+    selectedComponentIds.length > 1 && selectedComponentIds.includes(componentId);
 
   const handleCopyAction = (compId: string) => {
     const comp = components.find(c => c.id === compId);
@@ -1011,11 +1053,15 @@ export default function CircuitCanvas() {
       const dragGrid = getDragGridCoords(x, y, gridX, gridY);
 
       if (selectedId) {
-        if (isWireId(selectedId)) {
-          if (selectedWireIds.includes(selectedId) && beginGroupDrag(dragGrid.x, dragGrid.y)) {
-            return;
-          }
+        const hasMultiSelection = selectedComponentIds.length > 0 || selectedWireIds.length > 0;
+        const clickedSelectedComponent = !isWireId(selectedId) && selectedComponentIds.includes(selectedId);
+        const clickedSelectedWire = isWireId(selectedId) && selectedWireIds.includes(selectedId);
 
+        if (hasMultiSelection && (clickedSelectedComponent || clickedSelectedWire) && beginGroupDrag(dragGrid.x, dragGrid.y)) {
+          return;
+        }
+
+        if (isWireId(selectedId)) {
           setDraggedWireId(selectedId);
           const wire = wires.find(w => w.id === selectedId);
           if (wire?.routePoints && wire.routePoints.length > 0) {
@@ -1121,18 +1167,13 @@ export default function CircuitCanvas() {
               y: dragGrid.y - comp.y
             });
 
-            // Se a peça clicada faz parte da seleção múltipla, inicia arraste do grupo inteiro
-            if (selectedComponentIds.includes(comp.id)) {
-              beginGroupDrag(dragGrid.x, dragGrid.y);
-            } else {
-              // Limpa seleção múltipla pois ele clicou em outro item individual
-              setSelectedComponentIds([]);
-              setSelectedWireIds([]);
-              groupDragOffsetsRef.current = {};
-              groupDragStartRef.current = null;
-              groupWireRoutePointsRef.current = {};
-              setIsDraggingGroup(false);
-            }
+            // Limpa seleção múltipla pois ele clicou em outro item individual
+            setSelectedComponentIds([]);
+            setSelectedWireIds([]);
+            groupDragOffsetsRef.current = {};
+            groupDragStartRef.current = null;
+            groupWireRoutePointsRef.current = {};
+            setIsDraggingGroup(false);
           }
         }
       } else {
@@ -1511,7 +1552,8 @@ export default function CircuitCanvas() {
       // Rotação (tecla R ou tecla + do teclado numérico/comum)
       if ((e.key.toLowerCase() === 'r' || e.key === '+') && selectedComponentId) {
         e.preventDefault();
-        updateComponentRotation(selectedComponentId, 90);
+        const deltaRotation = e.altKey ? 180 : (e.shiftKey ? -90 : 90);
+        updateComponentRotation(selectedComponentId, deltaRotation);
       }
 
       // Espelhamento X (tecla X)
@@ -1534,10 +1576,10 @@ export default function CircuitCanvas() {
       }
 
       // Ctrl + C (Copiar)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedComponentId) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        copyStoreSelection();
+        copyActiveSelection();
       }
 
       // Ctrl + V (Colar)
@@ -1545,17 +1587,17 @@ export default function CircuitCanvas() {
         e.preventDefault();
         e.stopImmediatePropagation();
         if (storeClipboard) {
-          pasteStoreSelection({ x: mouseGridPos.x, y: mouseGridPos.y });
+          pasteActiveClipboard({ x: mouseGridPos.x, y: mouseGridPos.y });
         } else if (clipboard) {
           handlePasteAction(mouseGridPos.x, mouseGridPos.y);
         }
       }
 
       // Ctrl + D (Duplicar)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selectedComponentId) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        duplicateStoreSelection();
+        duplicateActiveSelection();
       }
 
       if ((e.key === 'Delete' || e.key === 'Backspace')) {
@@ -1654,9 +1696,8 @@ export default function CircuitCanvas() {
     isSpacePressed,
     selectedComponentIds,
     selectedWireIds,
-    copyStoreSelection,
-    pasteStoreSelection,
-    duplicateStoreSelection
+    copyStoreItems,
+    pasteStoreSelection
   ]);
 
   return (
@@ -1728,11 +1769,25 @@ export default function CircuitCanvas() {
                 </button>
                 <hr className="my-0.5 border-slate-200/50 dark:border-slate-700/50" />
                 <button
-                  onClick={() => handleRotateAction(contextMenu.componentId)}
+                  onClick={() => handleRotateAction(contextMenu.componentId, 90)}
                   className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
                 >
                   <RotateCw className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Girar (90°)</span>
+                  <span>Girar horário (90°)</span>
+                </button>
+                <button
+                  onClick={() => handleRotateAction(contextMenu.componentId, -90)}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-indigo-500 -scale-x-100" />
+                  <span>Girar anti-horário</span>
+                </button>
+                <button
+                  onClick={() => handleRotateAction(contextMenu.componentId, 180)}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                >
+                  <RotateCw className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Girar 180°</span>
                 </button>
                 <button
                   onClick={() => {
@@ -1755,14 +1810,28 @@ export default function CircuitCanvas() {
                   <span>Espelhar Y (Mirror Y)</span>
                 </button>
                 <button
-                  onClick={() => handleCopyAction(contextMenu.componentId)}
+                  onClick={() => {
+                    if (isContextComponentInMultiSelection(contextMenu.componentId)) {
+                      copyActiveSelection();
+                      setContextMenu(null);
+                    } else {
+                      handleCopyAction(contextMenu.componentId);
+                    }
+                  }}
                   className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
                 >
                   <Copy className="w-3.5 h-3.5 text-blue-500" />
                   <span>Copiar</span>
                 </button>
                 <button
-                  onClick={() => handleDuplicateAction(contextMenu.componentId)}
+                  onClick={() => {
+                    if (isContextComponentInMultiSelection(contextMenu.componentId)) {
+                      duplicateActiveSelection();
+                      setContextMenu(null);
+                    } else {
+                      handleDuplicateAction(contextMenu.componentId);
+                    }
+                  }}
                   className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
                 >
                   <Layers className="w-3.5 h-3.5 text-emerald-500" />
@@ -1793,12 +1862,19 @@ export default function CircuitCanvas() {
               </button>
               <hr className="my-0.5 border-slate-200/50 dark:border-slate-700/50" />
               <button
-                onClick={() => handlePasteAction(contextMenu.gridX, contextMenu.gridY)}
-                disabled={!clipboard}
+                  onClick={() => {
+                    if (storeClipboard) {
+                      pasteActiveClipboard({ x: contextMenu.gridX, y: contextMenu.gridY });
+                      setContextMenu(null);
+                    } else {
+                      handlePasteAction(contextMenu.gridX, contextMenu.gridY);
+                    }
+                }}
+                disabled={!storeClipboard && !clipboard}
                 className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 <PasteIcon className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Colar Peça</span>
+                <span>Colar</span>
               </button>
             </>
           )}
