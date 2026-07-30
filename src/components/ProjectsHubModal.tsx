@@ -26,6 +26,7 @@ interface ProjectsHubModalProps {
   onExportJSON?: () => void;
   onImportJSON?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   userName?: string;
+  userId?: string;
 }
 
 export default function ProjectsHubModal({
@@ -36,7 +37,8 @@ export default function ProjectsHubModal({
   onLoadProjectData,
   onExportJSON,
   onImportJSON,
-  userName = 'Engenheiro'
+  userName = 'Engenheiro',
+  userId
 }: ProjectsHubModalProps) {
   const [activeTab, setActiveTab] = useState<'recent' | 'examples'>('recent');
   const [cloudProjects, setCloudProjects] = useState<any[]>([]);
@@ -48,7 +50,7 @@ export default function ProjectsHubModal({
     try {
       const [cloudList, localList] = await Promise.all([
         listProjectsFromCloud(),
-        listProjects()
+        listProjects(userId)
       ]);
       setCloudProjects(cloudList || []);
       setLocalProjects(localList || []);
@@ -63,7 +65,7 @@ export default function ProjectsHubModal({
     if (isOpen) {
       fetchAllProjects();
     }
-  }, [isOpen]);
+  }, [isOpen, userId]);
 
   if (!isOpen) return null;
 
@@ -81,7 +83,7 @@ export default function ProjectsHubModal({
 
   const handleOpenLocal = async (id: string) => {
     setLoading(true);
-    const data = await loadProject(id);
+    const data = await loadProject(id, userId);
     setLoading(false);
     if (data) {
       onLoadProjectData(data);
@@ -101,7 +103,7 @@ export default function ProjectsHubModal({
   const handleDeleteLocal = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
     if (!confirm(`Excluir "${name}" do armazenamento local?`)) return;
-    await deleteProject(id);
+    await deleteProject(id, userId);
     fetchAllProjects();
   };
 

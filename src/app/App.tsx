@@ -176,6 +176,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const lastAuthUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isSupabaseConfigured()) {
@@ -195,6 +196,18 @@ export default function App() {
       return () => unsubscribe();
     }
   }, []);
+
+  useEffect(() => {
+    const currentUserId = authSession?.id || null;
+    if (currentUserId && lastAuthUserIdRef.current !== currentUserId) {
+      clearCircuit();
+      setProjectName('Novo Circuito');
+    }
+
+    lastAuthUserIdRef.current = currentUserId;
+    setCloudProjects([]);
+    setExamplesTab('examples');
+  }, [authSession?.id]);
 
   // Estados locais para Osciloscópio
   const [oscTimeWindow, setOscTimeWindow] = useState(0.12);
@@ -255,6 +268,37 @@ export default function App() {
   const oscPendingTriggerTimeRef = useRef<number | null>(null);
   const oscLockedTriggerTimeRef = useRef<number | null>(null);
   const oscTriggerTimeRef = useRef<number | null>(null);
+
+  const getOscWindowBounds = () => {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const margin = viewportWidth < 640 ? 8 : 16;
+    const width = Math.min(920, Math.max(320, viewportWidth - margin * 2));
+    const height = Math.min(620, Math.max(320, viewportHeight - margin * 2));
+
+    return {
+      width,
+      height,
+      margin,
+      x: Math.max(margin, Math.round((viewportWidth - width) / 2)),
+      y: Math.max(margin, Math.round((viewportHeight - height) / 2))
+    };
+  };
+
+  const openOscilloscopeWindow = () => {
+    const bounds = getOscWindowBounds();
+    setOscWindowPosition({ x: bounds.x, y: bounds.y });
+    setOscWindowOpen(true);
+    setOscWindowMinimized(false);
+  };
+
+  const clampOscWindowPosition = (x: number, y: number) => {
+    const bounds = getOscWindowBounds();
+    return {
+      x: Math.min(Math.max(bounds.margin, x), Math.max(bounds.margin, window.innerWidth - bounds.width - bounds.margin)),
+      y: Math.min(Math.max(bounds.margin, y), Math.max(bounds.margin, window.innerHeight - bounds.height - bounds.margin))
+    };
+  };
   useEffect(() => {
     componentsRef.current = components;
   }, [components]);
@@ -288,8 +332,7 @@ export default function App() {
 
       // Só abre a janela do osciloscópio se ele estiver presente no esquema elétrico
       if (scopeComp) {
-        setOscWindowOpen(true);
-        setOscWindowMinimized(false);
+        openOscilloscopeWindow();
         setOscChannels(prev => ({
           ch1: { ...prev.ch1, componentId: prev.ch1.componentId || scopeComp.id },
           ch2: { ...prev.ch2, componentId: prev.ch2.componentId || scopeComp.id }
@@ -302,10 +345,10 @@ export default function App() {
     if (!oscDragOffset) return;
 
     const handleMove = (event: MouseEvent) => {
-      setOscWindowPosition({
-        x: event.clientX - oscDragOffset.x,
-        y: event.clientY - oscDragOffset.y
-      });
+      setOscWindowPosition(clampOscWindowPosition(
+        event.clientX - oscDragOffset.x,
+        event.clientY - oscDragOffset.y
+      ));
     };
 
     const handleUp = () => setOscDragOffset(null);
@@ -517,12 +560,12 @@ export default function App() {
           viewport,
           projectDevices
         };
-        saveProject(projData);
+        saveProject(projData, authSession?.id);
       }
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [components, wires, texts, viewport, project, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep, projectDevices]);
+  }, [components, wires, texts, viewport, project, snapToGrid, simulationSpeed, currentAnimationSpeed, timestep, projectDevices, authSession?.id]);
 
   // Escuta os eventos da simulação física para popular o Osciloscópio
   useEffect(() => {
@@ -716,7 +759,7 @@ export default function App() {
       viewport,
       projectDevices
     };
-    await saveProject(projData);
+    await saveProject(projData, authSession?.id);
     let msg = 'Projeto salvo no armazenamento local!';
 
     if (isSupabaseConfigured() && authSession) {
@@ -1204,8 +1247,12 @@ export default function App() {
     if (isSupabaseConfigured()) {
       await signOutUser();
     }
+    clearCircuit();
+    setProjectName('Novo Circuito');
+    setCloudProjects([]);
     setAuthSession(null);
     setShowAdminModal(false);
+    setShowProjectsHub(true);
   };
 
   if (!authSession) {
@@ -1522,8 +1569,7 @@ export default function App() {
     if (action === 'acquire') {
       setOscCaptureRunning(prev => !prev);
     } else if (action === 'display') {
-      setOscWindowOpen(true);
-      setOscWindowMinimized(false);
+      openOscilloscopeWindow();
     } else if (action === 'measure') {
       clearOscilloscopeCapture();
     } else if (action === 'cursor') {
@@ -1676,8 +1722,7 @@ export default function App() {
               } else {
                 const hasScope = components.some(c => c.type === 'oscilloscope');
                 if (hasScope) {
-                  setOscWindowOpen(true);
-                  setOscWindowMinimized(false);
+                  openOscilloscopeWindow();
                 }
                 const hasFgen = components.find(c => c.type === 'function_generator');
                 if (hasFgen) {
@@ -1967,12 +2012,28 @@ export default function App() {
                 top: oscWindowPosition.y,
                 zIndex: topWindow === 'osc' ? 99999 : 99990,
                 ...(oscWindowMinimized
-                  ? { height: '42px', minHeight: '42px', maxHeight: '42px', resize: 'none', overflow: 'hidden' }
-                  : { resize: 'both', overflow: 'hidden', minWidth: '680px', minHeight: '340px' }
+                  ? {
+                      width: 'min(360px, calc(100vw - 16px))',
+                      height: '42px',
+                      minHeight: '42px',
+                      maxHeight: '42px',
+                      resize: 'none',
+                      overflow: 'hidden'
+                    }
+                  : {
+                      width: 'min(920px, calc(100vw - 16px))',
+                      height: 'min(620px, calc(100vh - 16px))',
+                      maxWidth: 'calc(100vw - 16px)',
+                      maxHeight: 'calc(100vh - 16px)',
+                      resize: 'both',
+                      overflow: 'hidden',
+                      minWidth: '320px',
+                      minHeight: '320px'
+                    }
                 )
               }}
               className={`fixed bg-[#d8d8d0] border border-[#b8b8ad] rounded-lg shadow-2xl flex flex-col ${
-                oscWindowMinimized ? 'w-[360px] h-[42px] overflow-hidden' : 'w-[920px] h-[460px]'
+                oscWindowMinimized ? 'h-[42px] overflow-hidden' : ''
               }`}
             >
               {/* Header da janela */}
@@ -1983,19 +2044,19 @@ export default function App() {
                     y: event.clientY - oscWindowPosition.y
                   });
                 }}
-                className="flex items-center justify-between px-4 py-2 border-b border-[#bdbdb3] cursor-move bg-[#eeeeea]"
+                className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-[#bdbdb3] cursor-move bg-[#eeeeea] shrink-0"
               >
-                <div className="flex items-center space-x-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                <div className="flex min-w-0 items-center space-x-2 text-[10px] sm:text-xs font-black uppercase tracking-wider text-slate-700">
                   <TrendingUp size={14} className="text-red-500" />
-                  <span>Osciloscópio Digital 2 Canais 50MHz</span>
-                  <span className="text-[10px] px-1.5 py-0.5 bg-cyan-100 text-cyan-700 border border-cyan-300 rounded-sm">DSO</span>
+                  <span className="truncate">Osciloscópio Digital 2 Canais 50MHz</span>
+                  <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 bg-cyan-100 text-cyan-700 border border-cyan-300 rounded-sm">DSO</span>
                   {isSimulating && !oscWindowMinimized && (
                     <span className="text-[10px] text-slate-500 normal-case font-mono font-normal">
                       {oscPoints.length} amostras
                     </span>
                   )}
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
                   <button
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={() => setOscCaptureRunning(prev => !prev)}
@@ -2031,9 +2092,9 @@ export default function App() {
             </div>
 
             {!oscWindowMinimized && (
-              <div className="flex-1 flex flex-row p-3 space-x-3 min-h-0 bg-[#d8d8d0]">
+              <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-3 p-2 sm:p-3 min-h-0 bg-[#d8d8d0] overflow-y-auto overflow-x-hidden">
                 {/* Gráfico do Sinal */}
-                <div className="flex-1 bg-[#ecece6] border border-[#b7b7ad] rounded-md p-2 flex flex-col relative min-h-0 shadow-inner">
+                <div className="flex-1 bg-[#ecece6] border border-[#b7b7ad] rounded-md p-2 flex flex-col relative min-h-[240px] lg:min-h-0 shadow-inner">
                   <div className="w-full h-full flex flex-col">
                     <div className="flex justify-between items-center text-[10px] text-slate-600 font-mono mb-1">
                       <div className="flex items-center space-x-3">
@@ -2268,7 +2329,7 @@ export default function App() {
                   </div>
                 </div>
 
-	                <div className="w-10 flex flex-col justify-center space-y-2">
+	                <div className="w-full lg:w-10 flex flex-row lg:flex-col justify-center gap-2 lg:gap-0 lg:space-y-2">
 	                  {scopeSoftButtons.map((button) => (
 	                    <button
 	                      key={button.label}
@@ -2286,7 +2347,7 @@ export default function App() {
 	                </div>
 
                 {/* Controles do Osciloscópio */}
-                <div className="w-[350px] bg-[#d4d4cc] border border-[#b3b3a8] rounded-md p-2 flex flex-col space-y-2 shrink-0 overflow-y-auto overflow-x-hidden">
+                <div className="w-full lg:w-[350px] bg-[#d4d4cc] border border-[#b3b3a8] rounded-md p-2 flex flex-col space-y-2 shrink-0 overflow-visible lg:overflow-y-auto lg:overflow-x-hidden">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Painel de Osciloscópio</span>
                     <button
@@ -3367,6 +3428,7 @@ export default function App() {
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
         userName={authSession?.name || 'Engenheiro'}
+        userId={authSession?.id}
       />
 
       {/* --- MODAL DE AJUDA E ATALHOS --- */}

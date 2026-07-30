@@ -253,6 +253,17 @@ export async function saveProjectToCloud(project: CircuitProject): Promise<{ suc
   project.project.updatedAt = now;
 
   try {
+    const { data: existingProject } = await client
+      .from('projects')
+      .select('user_id')
+      .eq('id', projectId)
+      .maybeSingle();
+
+    if (existingProject && existingProject.user_id !== session.user.id) {
+      projectId = crypto.randomUUID();
+      project.project.id = projectId;
+    }
+
     const { error } = await client
       .from('projects')
       .upsert({
@@ -280,11 +291,15 @@ export async function loadProjectFromCloud(id: string): Promise<CircuitProject |
     return null;
   }
 
+  const { data: { session } } = await client.auth.getSession();
+  if (!session?.user) return null;
+
   try {
     const { data, error } = await client
       .from('projects')
       .select('project_data')
       .eq('id', id)
+      .eq('user_id', session.user.id)
       .single();
 
     if (error || !data) {
@@ -305,10 +320,14 @@ export async function listProjectsFromCloud(): Promise<Array<{ id: string; name:
     return [];
   }
 
+  const { data: { session } } = await client.auth.getSession();
+  if (!session?.user) return [];
+
   try {
     const { data, error } = await client
       .from('projects')
       .select('id, name, created_at, updated_at')
+      .eq('user_id', session.user.id)
       .order('updated_at', { ascending: false });
 
     if (error || !data) {
@@ -334,11 +353,15 @@ export async function deleteProjectFromCloud(id: string): Promise<boolean> {
     return false;
   }
 
+  const { data: { session } } = await client.auth.getSession();
+  if (!session?.user) return false;
+
   try {
     const { error } = await client
       .from('projects')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', session.user.id);
 
     if (error) {
       console.error('Erro ao deletar projeto do Supabase:', error);

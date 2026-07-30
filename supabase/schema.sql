@@ -40,6 +40,7 @@ CREATE POLICY "Usuários podem deletar seus próprios projetos"
 
 -- 5. Índice para otimização de consultas por usuário
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON public.projects(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_user_project_id ON public.projects(user_id, id);
 
 -- 6. Função e Trigger para atualização automática de updated_at
 CREATE OR REPLACE FUNCTION public.handle_updated_at()

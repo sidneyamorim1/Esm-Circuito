@@ -25,7 +25,7 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveProject(project: CircuitProject): Promise<void> {
+export async function saveProject(project: CircuitProject, ownerId?: string): Promise<void> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -34,6 +34,7 @@ export async function saveProject(project: CircuitProject): Promise<void> {
       
       // Atualiza timestamp
       project.project.updatedAt = new Date().toISOString();
+      (project as any).ownerId = ownerId || null;
       
       const request = store.put(project);
 
@@ -45,7 +46,7 @@ export async function saveProject(project: CircuitProject): Promise<void> {
   }
 }
 
-export async function loadProject(id: string): Promise<CircuitProject | null> {
+export async function loadProject(id: string, ownerId?: string): Promise<CircuitProject | null> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -53,7 +54,14 @@ export async function loadProject(id: string): Promise<CircuitProject | null> {
       const store = transaction.objectStore(STORE_NAME);
       const request = store.get(id);
 
-      request.onsuccess = () => resolve(request.result || null);
+      request.onsuccess = () => {
+        const project = request.result;
+        if (!project || (project as any).ownerId !== ownerId) {
+          resolve(null);
+          return;
+        }
+        resolve(project);
+      };
       request.onerror = () => reject(request.error);
     });
   } catch (error) {
@@ -62,7 +70,7 @@ export async function loadProject(id: string): Promise<CircuitProject | null> {
   }
 }
 
-export async function listProjects(): Promise<any[]> {
+export async function listProjects(ownerId?: string): Promise<any[]> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
@@ -71,12 +79,14 @@ export async function listProjects(): Promise<any[]> {
       const request = store.getAll();
 
       request.onsuccess = () => {
-        const projects = request.result.map(item => ({
-          id: item.project.id,
-          name: item.project.name,
-          createdAt: item.project.createdAt,
-          updatedAt: item.project.updatedAt
-        }));
+        const projects = request.result
+          .filter(item => item.ownerId === ownerId)
+          .map(item => ({
+            id: item.project.id,
+            name: item.project.name,
+            createdAt: item.project.createdAt,
+            updatedAt: item.project.updatedAt
+          }));
         resolve(projects);
       };
       request.onerror = () => reject(request.error);
@@ -87,16 +97,26 @@ export async function listProjects(): Promise<any[]> {
   }
 }
 
-export async function deleteProject(id: string): Promise<void> {
+export async function deleteProject(id: string, ownerId?: string): Promise<void> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.delete(id);
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const readRequest = store.get(id);
+      readRequest.onsuccess = () => {
+        const project = readRequest.result;
+        if (!project || project.ownerId !== ownerId) {
+          resolve();
+          return;
+        }
+
+        const deleteRequest = store.delete(id);
+        deleteRequest.onsuccess = () => resolve();
+        deleteRequest.onerror = () => reject(deleteRequest.error);
+      };
+      readRequest.onerror = () => reject(readRequest.error);
     });
   } catch (error) {
     console.error('Erro ao deletar projeto no IndexedDB:', error);
