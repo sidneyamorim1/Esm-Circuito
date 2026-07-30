@@ -5,7 +5,7 @@ import Pcb3dViewer from '../circuit/pcb/Pcb3dViewer';
 import { circuitExamples, type CircuitExample } from '../examples/circuits';
 import { saveProject } from '../storage/db';
 import { simulationManager } from '../simulation/workers/workerInterface';
-import { updateComponentTerminals } from '../utils/circuitUtils';
+import { normalizeComponentGeometry } from '../utils/circuitUtils';
 import {
   Play,
   Pause,
@@ -178,6 +178,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const isLocalAuthEnabled = import.meta.env.DEV;
   const lastAuthUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -270,6 +271,27 @@ export default function App() {
   const oscPendingTriggerTimeRef = useRef<number | null>(null);
   const oscLockedTriggerTimeRef = useRef<number | null>(null);
   const oscTriggerTimeRef = useRef<number | null>(null);
+
+  const zoomSchematicAtCenter = (zoomFactor: number) => {
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas');
+    if (!canvas) {
+      setViewport({ zoom: Math.max(0.4, Math.min(viewport.zoom * zoomFactor, 3)) });
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const worldX = (centerX / viewport.zoom) - viewport.x;
+    const worldY = (centerY / viewport.zoom) - viewport.y;
+    const nextZoom = Math.max(0.4, Math.min(viewport.zoom * zoomFactor, 3));
+
+    setViewport({
+      zoom: nextZoom,
+      x: (centerX / nextZoom) - worldX,
+      y: (centerY / nextZoom) - worldY
+    });
+  };
 
   const getOscWindowBounds = () => {
     const viewportWidth = window.innerWidth;
@@ -514,6 +536,8 @@ export default function App() {
   // Atalhos Globais de Teclado (Ctrl+C, Ctrl+V, Ctrl+D)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+
       const target = e.target as HTMLElement;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return;
@@ -783,7 +807,7 @@ export default function App() {
       return;
     }
 
-    const updatedComponents = (projectCloud.components || []).map(comp => updateComponentTerminals(comp));
+    const updatedComponents = (projectCloud.components || []).map(comp => normalizeComponentGeometry(comp));
     loadProject({
       ...projectCloud,
       components: updatedComponents
@@ -805,7 +829,7 @@ export default function App() {
   const handleLoadExample = (example: CircuitExample) => {
     // Para carregar o exemplo com segurança e sem quebrar as pontas dos fios:
     // Nós mapeamos e recalculamos os terminais absolutos
-    const updatedComponents = example.components.map(comp => updateComponentTerminals(comp));
+    const updatedComponents = example.components.map(comp => normalizeComponentGeometry(comp));
     
     loadProject({
       project: {
@@ -864,7 +888,7 @@ export default function App() {
         }
         
         // Corrige terminais de componentes importados
-        const comps = (parsed.components || []).map((c: any) => updateComponentTerminals(c));
+        const comps = (parsed.components || []).map((c: any) => normalizeComponentGeometry(c));
 
         loadProject({
           project: parsed.project || project,
@@ -1196,7 +1220,7 @@ export default function App() {
     setAuthError('');
     setAuthSuccess('');
 
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() && !isLocalAuthEnabled) {
       setAuthLoading(false);
       setAuthError('A autenticação não está configurada. Contate o administrador.');
       return;
@@ -1214,6 +1238,17 @@ export default function App() {
       persistSession({ id: user.id, name: user.name, email: user.email, role: user.role });
       resetAuthForm();
     }
+  };
+
+  const handleLocalLogin = () => {
+    const email = authEmail.trim().toLowerCase() || 'local@localhost.dev';
+    persistSession({
+      id: 'local-dev-user',
+      name: email.split('@')[0] || 'Dev Local',
+      email,
+      role: email.includes('admin') ? 'admin' : 'user'
+    });
+    resetAuthForm();
   };
 
   const handlePasswordReset = async () => {
@@ -1324,7 +1359,11 @@ export default function App() {
                 <span>Acesso Restrito</span>
               </div>
               <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">Entrar na Plataforma</h3>
-              <p className="text-xs text-slate-400 mt-1">Informe suas credenciais para acessar o simulador de circuitos.</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {isLocalAuthEnabled && !isCloud
+                  ? 'Modo local ativo: use qualquer e-mail e senha para testar.'
+                  : 'Informe suas credenciais para acessar o simulador de circuitos.'}
+              </p>
             </div>
 
             <form onSubmit={(e) => e.preventDefault()} className="space-y-3 sm:space-y-4">
@@ -1414,6 +1453,17 @@ export default function App() {
                   <span>Entrar no Simulador</span>
                 )}
               </button>
+
+              {isLocalAuthEnabled && (
+                <button
+                  type="button"
+                  onClick={handleLocalLogin}
+                  disabled={authLoading}
+                  className="w-full border border-white/10 bg-white/5 hover:bg-white/10 text-slate-200 font-bold py-2.5 text-xs rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Entrar em modo local
+                </button>
+              )}
 
             </form>
           </section>
@@ -3328,23 +3378,24 @@ export default function App() {
         isOpen={showAiPanel}
         onClose={() => setShowAiPanel(false)}
         onLoadCircuit={(name, compList, wireList) => {
+          const normalizedComponents = compList.map(comp => normalizeComponentGeometry(comp));
           useStore.setState({
-            components: compList,
+            components: normalizedComponents,
             wires: wireList,
             project: { ...project, name }
           });
           simulationManager.reset();
-          simulationManager.updateCircuit(compList, wireList);
+          simulationManager.updateCircuit(normalizedComponents, wireList);
         }}
       />
 
       {/* Dock Flutuante de Zoom & Grade no Canto Inferior Direito do Editor */}
       <div className="fixed bottom-9 right-6 z-20 hidden sm:flex items-center gap-1 p-1.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-xl text-slate-600 dark:text-slate-300">
-        <button onClick={() => setViewport({ zoom: Math.min(viewport.zoom + 0.1, 3) })} className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800" title="Aumentar Zoom">
+        <button onClick={() => zoomSchematicAtCenter(1.1)} className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800" title="Aumentar Zoom">
           <ZoomIn size={14} />
         </button>
         <span className="text-xs font-mono font-bold w-10 text-center text-slate-700 dark:text-slate-200">{(viewport.zoom * 100).toFixed(0)}%</span>
-        <button onClick={() => setViewport({ zoom: Math.max(viewport.zoom - 0.1, 0.5) })} className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800" title="Diminuir Zoom">
+        <button onClick={() => zoomSchematicAtCenter(0.9)} className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800" title="Diminuir Zoom">
           <ZoomOut size={14} />
         </button>
         <button onClick={resetViewport} className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800" title="Centralizar Visualização">

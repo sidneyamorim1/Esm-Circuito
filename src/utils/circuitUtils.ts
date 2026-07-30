@@ -347,7 +347,7 @@ function getDefaultProperties(type: string): Record<string, ComponentProperty> {
 }
 
 // Cria os terminais relativos de acordo com o tipo
-function getDefaultTerminals(type: string): { id: string; relX: number; relY: number; label?: string }[] {
+export function getDefaultTerminals(type: string): { id: string; relX: number; relY: number; label?: string }[] {
   if (type === 'junction') {
     return [{ id: 'j1', relX: 0, relY: 0, label: 'J' }];
   }
@@ -514,4 +514,24 @@ export function createCircuitComponent(
   };
 
   return updateComponentTerminals(component);
+}
+
+export function normalizeComponentGeometry(comp: CircuitComponent): CircuitComponent {
+  const defaultTerminals = getDefaultTerminals(comp.type);
+  const existingById = new Map(comp.terminals.map(term => [term.id, term]));
+
+  const terminals: Terminal[] = defaultTerminals.map(defaultTerm => {
+    const existing = existingById.get(defaultTerm.id);
+    return {
+      ...existing,
+      ...defaultTerm,
+      x: comp.x + defaultTerm.relX,
+      y: comp.y + defaultTerm.relY
+    };
+  });
+
+  return updateComponentTerminals({
+    ...comp,
+    terminals
+  });
 }

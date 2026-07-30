@@ -48,7 +48,11 @@ export default function CircuitCanvas() {
     updateText,
     undo,
     redo,
-    pushHistory
+    pushHistory,
+    clipboard: storeClipboard,
+    copySelection: copyStoreSelection,
+    pasteSelection: pasteStoreSelection,
+    duplicateSelection: duplicateStoreSelection
   } = useStore();
 
   // Estados locais para interações
@@ -322,6 +326,11 @@ export default function CircuitCanvas() {
       gridY
     };
   };
+
+  const getDragGridCoords = (worldX: number, worldY: number, gridX: number, gridY: number) => ({
+    x: snapToGrid ? gridX : worldX / GRID_SIZE,
+    y: snapToGrid ? gridY : worldY / GRID_SIZE
+  });
 
   // Função para medir distância de um ponto a um segmento
   const getDistanceToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
@@ -597,7 +606,14 @@ export default function CircuitCanvas() {
   const handleCopyAction = (compId: string) => {
     const comp = components.find(c => c.id === compId);
     if (comp) {
-      setClipboard(comp);
+      const copiedComp = JSON.parse(JSON.stringify(comp));
+      setClipboard(copiedComp);
+      useStore.setState({
+        clipboard: {
+          components: [copiedComp],
+          wires: []
+        }
+      });
     }
     setContextMenu(null);
   };
@@ -996,10 +1012,11 @@ export default function CircuitCanvas() {
     // Modo Seleção/Arraste
     if (activeTool === 'select') {
       const selectedId = trySelectElementAt(x, y);
+      const dragGrid = getDragGridCoords(x, y, gridX, gridY);
 
       if (selectedId) {
         if (isWireId(selectedId)) {
-          if (selectedWireIds.includes(selectedId) && beginGroupDrag(gridX, gridY)) {
+          if (selectedWireIds.includes(selectedId) && beginGroupDrag(dragGrid.x, dragGrid.y)) {
             return;
           }
 
@@ -1009,7 +1026,7 @@ export default function CircuitCanvas() {
             let closestIndex = 0;
             let closestDistance = Infinity;
             wire.routePoints.forEach((point, index) => {
-              const dist = Math.sqrt((gridX - point.x) ** 2 + (gridY - point.y) ** 2);
+              const dist = Math.sqrt((dragGrid.x - point.x) ** 2 + (dragGrid.y - point.y) ** 2);
               if (dist < closestDistance) {
                 closestIndex = index;
                 closestDistance = dist;
@@ -1018,8 +1035,8 @@ export default function CircuitCanvas() {
             const point = wire.routePoints[closestIndex];
             setDraggedWireRoutePointIndex(closestIndex);
             setDragOffset({
-              x: gridX - point.x,
-              y: gridY - point.y
+              x: dragGrid.x - point.x,
+              y: dragGrid.y - point.y
             });
             return;
           }
@@ -1033,8 +1050,8 @@ export default function CircuitCanvas() {
             const defaultOffset = wire.verticalFirst ? (termTo.y - termFrom.y) / 2 : (termTo.x - termFrom.x) / 2;
             const currentOffset = wire.bendOffset !== undefined ? wire.bendOffset : defaultOffset;
             setDragOffset({
-              x: gridX - termFrom.x - currentOffset,
-              y: gridY - termFrom.y - currentOffset
+              x: dragGrid.x - termFrom.x - currentOffset,
+              y: dragGrid.y - termFrom.y - currentOffset
             });
           }
         } else if (selectedId.startsWith('text_')) {
@@ -1042,8 +1059,8 @@ export default function CircuitCanvas() {
           if (textItem) {
             setDraggedComponentId(textItem.id);
             setDragOffset({
-              x: gridX - textItem.x,
-              y: gridY - textItem.y
+              x: dragGrid.x - textItem.x,
+              y: dragGrid.y - textItem.y
             });
             setSelectedComponentIds([]);
             setSelectedWireIds([]);
@@ -1104,13 +1121,13 @@ export default function CircuitCanvas() {
 
             setDraggedComponentId(comp.id);
             setDragOffset({
-              x: gridX - comp.x,
-              y: gridY - comp.y
+              x: dragGrid.x - comp.x,
+              y: dragGrid.y - comp.y
             });
 
             // Se a peça clicada faz parte da seleção múltipla, inicia arraste do grupo inteiro
             if (selectedComponentIds.includes(comp.id)) {
-              beginGroupDrag(gridX, gridY);
+              beginGroupDrag(dragGrid.x, dragGrid.y);
             } else {
               // Limpa seleção múltipla pois ele clicou em outro item individual
               setSelectedComponentIds([]);
@@ -1140,6 +1157,7 @@ export default function CircuitCanvas() {
     }
 
     const { x, y, gridX, gridY } = getGridCoordsFromEvent(e);
+    const dragGrid = getDragGridCoords(x, y, gridX, gridY);
     setMouseGridPos({ x: gridX, y: gridY });
 
     // ESTILO PROTEUS: Verifica se está pairando sobre algum terminal para indicar fiação inteligente
@@ -1242,14 +1260,14 @@ export default function CircuitCanvas() {
     }
 
     if (isDraggingGroup) {
-      const groupDeltaX = groupDragStartRef.current ? gridX - groupDragStartRef.current.x : 0;
-      const groupDeltaY = groupDragStartRef.current ? gridY - groupDragStartRef.current.y : 0;
+      const groupDeltaX = groupDragStartRef.current ? dragGrid.x - groupDragStartRef.current.x : 0;
+      const groupDeltaY = groupDragStartRef.current ? dragGrid.y - groupDragStartRef.current.y : 0;
       const updatedComponents = components.map(c => {
         if (selectedComponentIds.includes(c.id)) {
           const offset = groupDragOffsetsRef.current[c.id];
           if (offset) {
-            let targetX = gridX - offset.x;
-            let targetY = gridY - offset.y;
+            let targetX = dragGrid.x - offset.x;
+            let targetY = dragGrid.y - offset.y;
             if (snapToGrid) {
               targetX = Math.round(targetX);
               targetY = Math.round(targetY);
@@ -1294,8 +1312,8 @@ export default function CircuitCanvas() {
       }
     } else if (draggedComponentId) {
       if (draggedComponentId.startsWith('text_')) {
-        let targetX = gridX - dragOffset.x;
-        let targetY = gridY - dragOffset.y;
+        let targetX = dragGrid.x - dragOffset.x;
+        let targetY = dragGrid.y - dragOffset.y;
 
         if (snapToGrid) {
           targetX = Math.round(targetX);
@@ -1304,8 +1322,8 @@ export default function CircuitCanvas() {
 
         updateTextPosition(draggedComponentId, targetX, targetY);
       } else {
-        let targetX = gridX - dragOffset.x;
-        let targetY = gridY - dragOffset.y;
+        let targetX = dragGrid.x - dragOffset.x;
+        let targetY = dragGrid.y - dragOffset.y;
 
         if (snapToGrid) {
           targetX = Math.round(targetX);
@@ -1325,8 +1343,8 @@ export default function CircuitCanvas() {
     } else if (draggedWireId) {
       const wire = wires.find(w => w.id === draggedWireId);
       if (wire?.routePoints && draggedWireRoutePointIndex !== null) {
-        let targetX = gridX - dragOffset.x;
-        let targetY = gridY - dragOffset.y;
+        let targetX = dragGrid.x - dragOffset.x;
+        let targetY = dragGrid.y - dragOffset.y;
 
         if (snapToGrid) {
           targetX = Math.round(targetX);
@@ -1341,8 +1359,8 @@ export default function CircuitCanvas() {
       const termFrom = compFrom?.terminals.find(t => t.id === wire?.from.terminalId);
       if (wire && termFrom) {
         let targetOffset = wire.verticalFirst
-          ? (gridY - termFrom.y - dragOffset.y)
-          : (gridX - termFrom.x - dragOffset.x);
+          ? (dragGrid.y - termFrom.y - dragOffset.y)
+          : (dragGrid.x - termFrom.x - dragOffset.x);
 
         if (snapToGrid) {
           targetOffset = Math.round(targetOffset);
@@ -1552,23 +1570,31 @@ export default function CircuitCanvas() {
       // Ctrl + C (Copiar)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && selectedComponentId) {
         e.preventDefault();
-        handleCopyAction(selectedComponentId);
+        e.stopImmediatePropagation();
+        copyStoreSelection();
       }
 
       // Ctrl + V (Colar)
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v' && clipboard) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
         e.preventDefault();
-        handlePasteAction(mouseGridPos.x, mouseGridPos.y);
+        e.stopImmediatePropagation();
+        if (storeClipboard) {
+          pasteStoreSelection({ x: mouseGridPos.x, y: mouseGridPos.y });
+        } else if (clipboard) {
+          handlePasteAction(mouseGridPos.x, mouseGridPos.y);
+        }
       }
 
       // Ctrl + D (Duplicar)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && selectedComponentId) {
         e.preventDefault();
-        handleDuplicateAction(selectedComponentId);
+        e.stopImmediatePropagation();
+        duplicateStoreSelection();
       }
 
       if ((e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         if (selectedComponentIds.length > 0 || selectedWireIds.length > 0) {
           const wiresToKeep = wires.filter(w => !selectedWireIds.includes(w.id));
           const activeComponents = components.filter(c => !selectedComponentIds.includes(c.id));
@@ -1652,6 +1678,7 @@ export default function CircuitCanvas() {
     updateComponentRotation,
     setActiveTool,
     clipboard,
+    storeClipboard,
     mouseGridPos,
     toggleComponentMirrorX,
     toggleComponentMirrorY,
@@ -1660,7 +1687,10 @@ export default function CircuitCanvas() {
     tempVerticalFirst,
     isSpacePressed,
     selectedComponentIds,
-    selectedWireIds
+    selectedWireIds,
+    copyStoreSelection,
+    pasteStoreSelection,
+    duplicateStoreSelection
   ]);
 
   return (

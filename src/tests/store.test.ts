@@ -8,6 +8,7 @@ describe('Zustand Circuit Store', () => {
     useStore.getState().clearCircuit();
     useStore.getState().setIsSimulating(false);
     useStore.getState().setTheme('dark');
+    useStore.setState({ clipboard: null });
   });
 
   it('deve inicializar com valores padrão corretos', () => {
@@ -127,5 +128,70 @@ describe('Zustand Circuit Store', () => {
     expect(copyComp.x).toBe(13); // 10 + 3
     expect(copyComp.y).toBe(13); // 10 + 3
     expect(copyComp.name).toContain('Copia');
+  });
+
+  it('deve colar componente na posição do cursor mantendo terminais alinhados', () => {
+    const state = useStore.getState();
+
+    const resistor: CircuitComponent = {
+      id: 'resistor-cursor',
+      type: 'resistor',
+      name: 'Resistor R20',
+      x: 10,
+      y: 10,
+      rotation: 0,
+      properties: {},
+      terminals: [
+        { id: 't1', relX: -2, relY: 0, x: 8, y: 10 },
+        { id: 't2', relX: 2, relY: 0, x: 12, y: 10 }
+      ]
+    };
+
+    state.addComponent(resistor);
+    state.setSelectedComponentId('resistor-cursor');
+    state.copySelection();
+    state.pasteSelection({ x: 30, y: 25 });
+
+    const pastedComp = useStore.getState().components[1];
+    expect(pastedComp.x).toBe(30);
+    expect(pastedComp.y).toBe(25);
+    expect(pastedComp.terminals[0].x).toBe(28);
+    expect(pastedComp.terminals[0].y).toBe(25);
+    expect(pastedComp.terminals[1].x).toBe(32);
+    expect(pastedComp.terminals[1].y).toBe(25);
+  });
+
+  it('deve normalizar terminais de peças carregadas com escala antiga', () => {
+    const state = useStore.getState();
+
+    state.loadProject({
+      project: {
+        id: 'legacy-project',
+        name: 'Projeto legado',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      components: [{
+        id: 'function-generator-legacy',
+        type: 'function_generator',
+        name: 'Gerador legado',
+        x: 20,
+        y: 12,
+        rotation: 0,
+        properties: {},
+        terminals: [
+          { id: 'p', relX: -40, relY: 0, x: -20, y: 12 },
+          { id: 'n', relX: 40, relY: 0, x: 60, y: 12 }
+        ]
+      }],
+      wires: [],
+      texts: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      projectDevices: []
+    });
+
+    const normalized = useStore.getState().components[0];
+    expect(normalized.terminals[0]).toMatchObject({ id: 'p', relX: -2, relY: 0, x: 18, y: 12 });
+    expect(normalized.terminals[1]).toMatchObject({ id: 'n', relX: 2, relY: 0, x: 22, y: 12 });
   });
 });

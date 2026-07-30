@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CircuitComponent, CircuitWire, CircuitText, Viewport, ProjectMetadata, ComponentProperty } from '../types/circuit';
+import { normalizeComponentGeometry, updateComponentTerminals } from '../utils/circuitUtils';
 
 export type ToolType = 'select' | 'wire' | 'delete' | string;
 
@@ -83,7 +84,7 @@ interface CircuitStore {
   // Área de Transferência e Duplicação
   clipboard: { components: CircuitComponent[]; wires: CircuitWire[] } | null;
   copySelection: () => void;
-  pasteSelection: () => void;
+  pasteSelection: (targetGridPosition?: { x: number; y: number }) => void;
   duplicateSelection: () => void;
 }
 
@@ -170,7 +171,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
     simulationSpeed: projectData.settings?.simulationSpeed ?? get().simulationSpeed,
     currentAnimationSpeed: projectData.settings?.currentAnimationSpeed ?? get().currentAnimationSpeed,
     timestep: projectData.settings?.timestep ?? get().timestep,
-    components: projectData.components || [],
+    components: (projectData.components || []).map((comp: CircuitComponent) => normalizeComponentGeometry(comp)),
     wires: projectData.wires || [],
     texts: projectData.texts || [],
     viewport: projectData.viewport || initialViewport,
@@ -202,8 +203,9 @@ export const useStore = create<CircuitStore>((set, get) => ({
   // Ações
   addComponent: (component) => {
     get().pushHistory();
+    const normalizedComponent = normalizeComponentGeometry(component);
     set((state) => ({
-      components: [...state.components, component],
+      components: [...state.components, normalizedComponent],
       project: { ...state.project, updatedAt: new Date().toISOString() }
     }));
   },
@@ -218,7 +220,9 @@ export const useStore = create<CircuitStore>((set, get) => ({
   },
   updateComponentPosition: (id, x, y) => {
     set((state) => ({
-      components: state.components.map((c) => (c.id === id ? { ...c, x, y } : c)),
+      components: state.components.map((c) => (
+        c.id === id ? updateComponentTerminals({ ...c, x, y }) : c
+      )),
       project: { ...state.project, updatedAt: new Date().toISOString() }
     }));
   },
@@ -226,7 +230,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
     get().pushHistory();
     set((state) => ({
       components: state.components.map((c) =>
-        c.id === id ? { ...c, rotation: (c.rotation + deltaRotation) % 360 } : c
+        c.id === id ? updateComponentTerminals({ ...c, rotation: (c.rotation + deltaRotation) % 360 }) : c
       ),
       project: { ...state.project, updatedAt: new Date().toISOString() }
     }));
@@ -235,7 +239,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
     get().pushHistory();
     set((state) => ({
       components: state.components.map((c) =>
-        c.id === id ? { ...c, mirrorX: !c.mirrorX } : c
+        c.id === id ? updateComponentTerminals({ ...c, mirrorX: !c.mirrorX }) : c
       ),
       project: { ...state.project, updatedAt: new Date().toISOString() }
     }));
@@ -244,7 +248,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
     get().pushHistory();
     set((state) => ({
       components: state.components.map((c) =>
-        c.id === id ? { ...c, mirrorY: !c.mirrorY } : c
+        c.id === id ? updateComponentTerminals({ ...c, mirrorY: !c.mirrorY }) : c
       ),
       project: { ...state.project, updatedAt: new Date().toISOString() }
     }));
@@ -475,7 +479,7 @@ export const useStore = create<CircuitStore>((set, get) => ({
       });
     }
   },
-  pasteSelection: () => {
+  pasteSelection: (targetGridPosition) => {
     const { clipboard } = get();
     if (!clipboard || (clipboard.components.length === 0 && clipboard.wires.length === 0)) return;
 
@@ -483,14 +487,18 @@ export const useStore = create<CircuitStore>((set, get) => ({
 
     const idMap: Record<string, string> = {};
     const newComponents: CircuitComponent[] = [];
+    const anchorComponent = clipboard.components[0];
+    const offsetX = targetGridPosition && anchorComponent ? targetGridPosition.x - anchorComponent.x : 3;
+    const offsetY = targetGridPosition && anchorComponent ? targetGridPosition.y - anchorComponent.y : 3;
 
-    // Copia componentes com deslocamento de +3 unidades no grid para não sobrepor
+    // Copia componentes mantendo o desenho relativo; quando houver posição-alvo,
+    // cola o primeiro componente exatamente nesse ponto do grid.
     clipboard.components.forEach(comp => {
       const newId = `${comp.type}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 5)}`;
       idMap[comp.id] = newId;
 
-      const newX = comp.x + 3;
-      const newY = comp.y + 3;
+      const newX = comp.x + offsetX;
+      const newY = comp.y + offsetY;
 
       const newComp: CircuitComponent = {
         ...JSON.parse(JSON.stringify(comp)),
@@ -500,12 +508,12 @@ export const useStore = create<CircuitStore>((set, get) => ({
         y: newY,
         terminals: comp.terminals.map(t => ({
           ...t,
-          x: t.x + 3,
-          y: t.y + 3
+          x: t.x + offsetX,
+          y: t.y + offsetY
         }))
       };
 
-      newComponents.push(newComp);
+      newComponents.push(normalizeComponentGeometry(newComp));
     });
 
     // Copia fios internos entre os componentes copiados
@@ -518,7 +526,10 @@ export const useStore = create<CircuitStore>((set, get) => ({
         ...JSON.parse(JSON.stringify(wire)),
         id: `wire_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 5)}`,
         from: { ...wire.from, componentId: newFromId },
-        to: { ...wire.to, componentId: newToId }
+        to: { ...wire.to, componentId: newToId },
+        routePoints: wire.routePoints && idMap[wire.from.componentId] && idMap[wire.to.componentId]
+          ? wire.routePoints.map(point => ({ x: point.x + offsetX, y: point.y + offsetY }))
+          : wire.routePoints
       };
 
       newWires.push(newWire);
