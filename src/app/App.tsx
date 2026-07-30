@@ -45,7 +45,8 @@ import {
   Lock,
   ShieldCheck,
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  FileText
 } from 'lucide-react';
 import AiAssistantPanel from '../components/AiAssistantPanel';
 import AdminModal from '../components/AdminModal';
@@ -168,6 +169,7 @@ export default function App() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showPickDevicesModal, setShowPickDevicesModal] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [stepMode, setStepMode] = useState(false);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -902,6 +904,7 @@ export default function App() {
   const componentLibrary = [
     { type: 'ground', name: 'Terra (GND)', category: 'sources', desc: 'Referência de 0V' },
     { type: 'source_dc', name: 'Fonte DC (Bateria)', category: 'sources', desc: 'Fonte de Tensão Contínua' },
+    { type: 'bench_supply', name: 'Fonte de Bancada', category: 'sources', desc: 'Fonte DC ajustável com limite de corrente' },
     { type: 'source_ac', name: 'Fonte AC (Gerador)', category: 'sources', desc: 'Gerador de Tensão Senoidal' },
     { type: 'source_pulse', name: 'Gerador de Pulso', category: 'sources', desc: 'Fonte de ondas quadradas/pulsos' },
     { type: 'source_current', name: 'Fonte de Corrente', category: 'sources', desc: 'Fonte de Corrente Constante' },
@@ -928,8 +931,11 @@ export default function App() {
     { type: 'logic_and', name: 'Porta AND (7408)', category: 'digital', desc: 'Porta lógica digital AND' },
     { type: 'logic_or', name: 'Porta OR (7432)', category: 'digital', desc: 'Porta lógica digital OR' },
     { type: 'logic_not', name: 'Porta NOT (7404)', category: 'digital', desc: 'Inversor lógico digital NOT' },
+    { type: 'net_label', name: 'Net Label', category: 'connectors', desc: 'Conecta redes pelo mesmo nome sem desenhar fios longos' },
 
     { type: 'function_generator', name: 'Gerador de Funções', category: 'instruments', desc: 'Gerador de Sinais (Senoidal, Quadrado, Triangular, Dente de Serra)' },
+    { type: 'multimeter', name: 'Multímetro Virtual', category: 'instruments', desc: 'Mede tensão, corrente lógica estimada e continuidade' },
+    { type: 'logic_analyzer', name: 'Analisador Lógico 4 Canais', category: 'instruments', desc: 'Mostra níveis digitais D0-D3 em tempo real' },
     { type: 'probe_dc', name: 'Ponta de Prova DC', category: 'instruments', desc: 'Ponta de medição pontual de tensão contínua (0V a 1000V DC)' },
     { type: 'probe_ac', name: 'Ponta de Prova AC', category: 'instruments', desc: 'Ponta de medição de tensão alternada (Pico e RMS AC)' },
     { type: 'voltmeter', name: 'Voltímetro', category: 'instruments', desc: 'Medidor de tensão entre dois pontos' },
@@ -940,6 +946,7 @@ export default function App() {
   const categories = [
     { id: 'all', label: 'Todos' },
     { id: 'sources', label: 'Fontes' },
+    { id: 'connectors', label: 'Conexões' },
     { id: 'passives', label: 'Passivos' },
     { id: 'electromechanical', label: 'Eletromecânicos' },
     { id: 'semiconductors', label: 'Diodos e Sensores' },
@@ -1417,6 +1424,100 @@ export default function App() {
 
   const burnedComponents = components.filter(c => c.simulationState?.isBurned);
   const hasBurnedComponents = burnedComponents.length > 0;
+  const electricalAlerts = [
+    ...burnedComponents.map(component => ({
+      level: 'danger',
+      message: `${component.name}: ${component.simulationState?.burnMessage || 'falha elétrica detectada'}`
+    })),
+    ...components
+      .filter(component => component.type === 'led')
+      .filter(component => !wires.some(wire => wire.from.componentId === component.id || wire.to.componentId === component.id))
+      .map(component => ({
+        level: 'warning',
+        message: `${component.name}: LED sem conexões. Use resistor em série antes de simular.`
+      })),
+    ...components
+      .filter(component => component.type === 'source_dc' || component.type === 'bench_supply')
+      .filter(component => Math.abs(component.simulationState?.current || 0) > Number(component.properties.currentLimit?.value ?? 5))
+      .map(component => ({
+        level: 'danger',
+        message: `${component.name}: corrente acima do limite configurado.`
+      })),
+    ...(components.some(component => component.type === 'ground') ? [] : [{
+      level: 'warning',
+      message: 'Circuito sem GND explícito. Adicione terra para medições mais previsíveis.'
+    }])
+  ].slice(0, 5);
+
+  const handleExportReport = () => {
+    const rows = components.map(component => `
+      <tr>
+        <td>${component.name}</td>
+        <td>${component.type}</td>
+        <td>${formatValue(component.simulationState?.voltage || 0, 'V')}</td>
+        <td>${formatValue(component.simulationState?.current || 0, 'A')}</td>
+        <td>${formatValue(component.simulationState?.power || 0, 'W')}</td>
+      </tr>
+    `).join('');
+    const alerts = electricalAlerts.map(alert => `<li>${alert.message}</li>`).join('') || '<li>Nenhum alerta elétrico ativo.</li>';
+    const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Relatório - ${project.name}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; color: #0f172a; }
+    h1 { color: #3730a3; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-size: 12px; }
+    th { background: #eef2ff; }
+    .meta { color: #64748b; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>${project.name}</h1>
+  <p class="meta">Relatório gerado em ${new Date().toLocaleString('pt-BR')} por ${authSession?.email || 'usuário local'}.</p>
+  <h2>Alertas</h2>
+  <ul>${alerts}</ul>
+  <h2>Componentes e Medições</h2>
+  <table>
+    <thead><tr><th>Nome</th><th>Tipo</th><th>Tensão</th><th>Corrente</th><th>Potência</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body>
+</html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${project.name.toLowerCase().replace(/\s+/g, '_')}_relatorio.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleSimulationButton = () => {
+    if (isSimulating) {
+      setIsSimulating(false);
+      useStore.getState().clearSimulationState();
+      return;
+    }
+
+    const hasScope = components.some(c => c.type === 'oscilloscope');
+    if (hasScope) {
+      openOscilloscopeWindow();
+    }
+    const hasFgen = components.find(c => c.type === 'function_generator');
+    if (hasFgen) {
+      setFgenComponentId(hasFgen.id);
+      setFgenWindowOpen(true);
+      setFgenWindowMinimized(false);
+    }
+
+    setIsSimulating(true);
+    if (stepMode) {
+      window.setTimeout(() => setIsSimulating(false), 180);
+    }
+  };
   const scopeButtonClass = 'h-7 rounded-[3px] border border-[#9b9b91] bg-[linear-gradient(#fafaf5,#c9cac1)] text-[8px] font-black uppercase text-slate-700 shadow-[0_2px_0_#8f8f86] active:translate-y-px active:shadow-none';
   const clearOscilloscopeCapture = () => {
     oscPendingTriggerTimeRef.current = null;
@@ -1608,6 +1709,13 @@ export default function App() {
         </div>
       )}
 
+      {electricalAlerts.length > 0 && !hasBurnedComponents && (
+        <div className="bg-amber-500 text-amber-950 px-4 py-1.5 text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40">
+          <AlertTriangle size={15} />
+          <span>{electricalAlerts[0].message}</span>
+        </div>
+      )}
+
       {/* 4.1 Barra Superior (Header Sleek, Compacto e Sem Cortes) */}
       <header className="flex items-center justify-between px-4 py-2 border-b bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 z-10 gap-3 h-14 overflow-hidden">
         {/* Esquerda: Logo + Nome do Projeto + Botão Projetos + Salvar */}
@@ -1641,6 +1749,14 @@ export default function App() {
             title="Salvar Projeto (Ctrl+S)"
           >
             <Save size={15} />
+          </button>
+
+          <button
+            onClick={handleExportReport}
+            className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-all shrink-0"
+            title="Exportar relatório de medições"
+          >
+            <FileText size={15} />
           </button>
         </div>
 
@@ -1715,24 +1831,7 @@ export default function App() {
         <div className="flex items-center gap-2 shrink-0">
           {/* Botão Principal de Simulação */}
           <button
-            onClick={() => {
-              if (isSimulating) {
-                setIsSimulating(false);
-                useStore.getState().clearSimulationState();
-              } else {
-                const hasScope = components.some(c => c.type === 'oscilloscope');
-                if (hasScope) {
-                  openOscilloscopeWindow();
-                }
-                const hasFgen = components.find(c => c.type === 'function_generator');
-                if (hasFgen) {
-                  setFgenComponentId(hasFgen.id);
-                  setFgenWindowOpen(true);
-                  setFgenWindowMinimized(false);
-                }
-                setIsSimulating(true);
-              }
-            }}
+            onClick={handleSimulationButton}
             className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-white font-extrabold text-xs transition-all shadow-md active:scale-95 ${
               isSimulating
                 ? 'bg-red-600 hover:bg-red-700 glow-effect-red'
@@ -1748,9 +1847,21 @@ export default function App() {
             ) : (
               <>
                 <Play size={12} fill="white" />
-                <span>Simular</span>
+                <span>{stepMode ? 'Passo' : 'Simular'}</span>
               </>
             )}
+          </button>
+
+          <button
+            onClick={() => setStepMode(prev => !prev)}
+            className={`hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+              stepMode
+                ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-600 dark:text-cyan-300'
+                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
+            }`}
+            title="Modo passo: executa uma fatia curta da simulação por clique"
+          >
+            Passo
           </button>
 
           {/* IA Copiloto */}
@@ -3016,6 +3127,22 @@ export default function App() {
 
           {!collapsedPanels.right && (
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {electricalAlerts.length > 0 && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-300">
+                    <AlertTriangle size={14} />
+                    Alertas Elétricos
+                  </div>
+                  <div className="space-y-1">
+                    {electricalAlerts.map((alert, index) => (
+                      <div key={`${alert.message}-${index}`} className="text-[11px] leading-snug text-amber-800 dark:text-amber-200">
+                        {alert.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {selectedComponent ? (
                 <div>
                   <div className="flex items-center space-x-2 pb-3 border-b border-slate-100 dark:border-slate-800 mb-4">

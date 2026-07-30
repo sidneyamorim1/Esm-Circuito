@@ -180,6 +180,21 @@ export function runSimulationStep(
     });
   });
 
+  const netLabelRoots: Record<string, string> = {};
+  components.forEach(comp => {
+    if (comp.type !== 'net_label') return;
+    const netName = String(comp.properties.netName?.value || '').trim().toUpperCase();
+    const term = comp.terminals.find(t => t.id === 'net');
+    if (!netName || !term) return;
+
+    const termKey = getTerminalKey(comp.id, term.id);
+    if (netLabelRoots[netName]) {
+      union(netLabelRoots[netName], termKey);
+    } else {
+      netLabelRoots[netName] = termKey;
+    }
+  });
+
   Object.values(coordsMap).forEach(termKeys => {
     for (let i = 1; i < termKeys.length; i++) {
       union(termKeys[0], termKeys[i]);
@@ -243,6 +258,7 @@ export function runSimulationStep(
   if (groundRoot === null) {
     const preferredReferenceTypes = new Set([
       'source_dc',
+      'bench_supply',
       'source_ac',
       'source_pulse',
       'source_current',
@@ -314,14 +330,14 @@ export function runSimulationStep(
   const bjts: { compId: string; nC: number; nB: number; nE: number; type: 'npn' | 'pnp'; beta: number }[] = [];
 
   components.forEach(comp => {
-    if (comp.type === 'source_dc') {
+    if (comp.type === 'source_dc' || comp.type === 'bench_supply') {
       const v = Number(comp.properties.voltage?.value ?? 5);
       voltageSources.push({
         compId: comp.id,
         nodePos: terminalToNode[getTerminalKey(comp.id, 'p')],
         nodeNeg: terminalToNode[getTerminalKey(comp.id, 'n')],
         voltage: v,
-        type: 'dc'
+        type: comp.type === 'bench_supply' ? 'bench' : 'dc'
       });
     } else if (comp.type === 'source_ac') {
       const amplitude = Number(comp.properties.amplitude?.value ?? 5);
@@ -939,7 +955,7 @@ export function runSimulationStep(
       const rCoil = Math.max(Number(comp.properties.coilResistance?.value ?? 100), 1);
       current = voltage / rCoil;
       branchCurrents[comp.id] = current;
-    } else if (comp.type === 'source_dc' || comp.type === 'source_ac' || comp.type === 'source_pulse' || comp.type === 'function_generator') {
+    } else if (comp.type === 'source_dc' || comp.type === 'bench_supply' || comp.type === 'source_ac' || comp.type === 'source_pulse' || comp.type === 'function_generator') {
       const nPos = getTermNode('p');
       const nNeg = getTermNode('n');
       voltage = getNodeVoltage(nPos) - getNodeVoltage(nNeg);
@@ -1064,12 +1080,46 @@ export function runSimulationStep(
         current = solutionVec[numNodes + srcIdx];
       }
       branchCurrents[comp.id] = current;
-    } else if (comp.type === 'voltmeter') {
+    } else if (comp.type === 'voltmeter' || comp.type === 'multimeter') {
       const nPos = getTermNode('p');
       const nNeg = getTermNode('n');
       voltage = getNodeVoltage(nPos) - getNodeVoltage(nNeg);
       current = 0; // Ideal (alta impedância)
       branchCurrents[comp.id] = current;
+      if (comp.type === 'multimeter') {
+        const continuity = Math.abs(voltage) < 0.05;
+        componentStates[comp.id] = {
+          voltage,
+          current,
+          power: 0,
+          custom: {
+            mode: comp.properties.mode?.value ?? 'voltage',
+            continuity
+          }
+        };
+        return;
+      }
+    } else if (comp.type === 'logic_analyzer') {
+      const threshold = Number(comp.properties.threshold?.value ?? 2.5);
+      const gnd = getTermNode('gnd');
+      const channels = ['d0', 'd1', 'd2', 'd3'].map(termId => {
+        const value = getNodeVoltage(getTermNode(termId)) - getNodeVoltage(gnd);
+        return {
+          id: termId.toUpperCase(),
+          voltage: value,
+          high: value >= threshold
+        };
+      });
+      voltage = channels[0]?.voltage ?? 0;
+      current = 0;
+      branchCurrents[comp.id] = current;
+      componentStates[comp.id] = {
+        voltage,
+        current,
+        power: 0,
+        custom: { channels, threshold }
+      };
+      return;
     } else if (comp.type === 'oscilloscope') {
       const nCh1 = getTermNode('ch1');
       const nG1 = getTermNode('g1');
@@ -1139,10 +1189,11 @@ export function runSimulationStep(
         isBurned = true;
         burnMessage = 'Sobrecarga de potência!';
       }
-    } else if (comp.type === 'source_dc') {
-      if (Math.abs(current) > 5.0) { // Bateria em curto-circuito (>5A)
+    } else if (comp.type === 'source_dc' || comp.type === 'bench_supply') {
+      const limit = comp.type === 'bench_supply' ? Number(comp.properties.currentLimit?.value ?? 1) : 5.0;
+      if (Math.abs(current) > limit) { // Bateria em curto-circuito ou fonte no limite
         isBurned = true;
-        burnMessage = 'Curto-circuito!';
+        burnMessage = comp.type === 'bench_supply' ? 'Limite de corrente excedido!' : 'Curto-circuito!';
       }
     }
 
@@ -1184,7 +1235,7 @@ export function runSimulationStep(
     };
 
     components.forEach(comp => {
-      if (comp.type === 'source_dc' || comp.type === 'source_ac' || comp.type === 'source_pulse' || comp.type === 'function_generator') {
+      if (comp.type === 'source_dc' || comp.type === 'bench_supply' || comp.type === 'source_ac' || comp.type === 'source_pulse' || comp.type === 'function_generator') {
         addTwoTerminalSource(comp, 'p', 'n');
       } else if (comp.type === 'source_current') {
         addTwoTerminalLoad(comp, 'p', 'n');

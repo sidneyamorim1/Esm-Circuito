@@ -227,6 +227,7 @@ export function drawComponent(
       break;
     }
 
+    case 'bench_supply':
     case 'source_dc': {
       // Bateria / Fonte DC (Traços paralelos)
       ctx.beginPath();
@@ -254,11 +255,15 @@ export function drawComponent(
 
       // Label da tensão
       const vVal = comp.properties.voltage?.value ?? 5;
+      const currentLimit = comp.properties.currentLimit?.value ?? 1;
       ctx.save();
       ctx.translate(0, 24);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
       ctx.font = '10px font-mono';
-      ctx.fillText(`${vVal}V`, 0, 0);
+      ctx.fillText(comp.type === 'bench_supply' ? `${vVal}V ${currentLimit}A` : `${vVal}V`, 0, 0);
+      if (comp.type === 'bench_supply') {
+        ctx.fillText('PSU', 0, -32);
+      }
       ctx.restore();
       break;
     }
@@ -910,6 +915,7 @@ export function drawComponent(
 
     case 'voltímetro':
     case 'ammeter':
+    case 'multimeter':
     case 'voltmeter': {
       // Voltímetro e Amperímetro Animados (Visor Digital Estilo Proteus)
       // Conexões externas
@@ -942,7 +948,8 @@ export function drawComponent(
       ctx.lineWidth = isSelected ? 2.5 : 2;
 
       // Label de instrumento (V ou A)
-      const isVolt = comp.type === 'voltmeter';
+      const meterMode = String(comp.properties.mode?.value || 'voltage');
+      const isVolt = comp.type === 'voltmeter' || comp.type === 'multimeter';
       
       // Valor da medição (animado)
       ctx.save();
@@ -967,10 +974,75 @@ export function drawComponent(
       }
       
       const sign = val < -1e-6 ? '-' : (val > 1e-6 ? '+' : ' ');
-      ctx.fillText(`${sign}${valStr}`, 0, -1);
+      if (comp.type === 'multimeter' && meterMode === 'continuity') {
+        ctx.fillText(comp.simulationState?.custom?.continuity ? 'BEEP' : 'OPEN', 0, -1);
+      } else {
+        ctx.fillText(`${sign}${valStr}`, 0, -1);
+      }
       ctx.font = 'bold 7px sans-serif';
-      ctx.fillText(unitStr, 0, 7);
+      ctx.fillText(comp.type === 'multimeter' ? meterMode.toUpperCase().slice(0, 4) : unitStr, 0, 7);
       ctx.restore();
+      break;
+    }
+
+    case 'logic_analyzer': {
+      const channelRows = [
+        { y: -40, label: 'D0' },
+        { y: -20, label: 'D1' },
+        { y: 0, label: 'D2' },
+        { y: 20, label: 'D3' },
+        { y: 40, label: 'GND' }
+      ];
+
+      ctx.beginPath();
+      channelRows.forEach(({ y }) => {
+        ctx.moveTo(-60, y);
+        ctx.lineTo(-28, y);
+      });
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.roundRect(-28, -52, 72, 104, 7);
+      ctx.fillStyle = theme === 'dark' ? '#0f172a' : '#e2e8f0';
+      ctx.fill();
+      ctx.strokeStyle = isSelected ? colors.selected : '#475569';
+      ctx.stroke();
+
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(-20, -42, 56, 66);
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'left';
+      const channels = comp.simulationState?.custom?.channels || [];
+      ['D0', 'D1', 'D2', 'D3'].forEach((label, index) => {
+        const high = channels[index]?.high ?? false;
+        ctx.fillStyle = high ? '#22c55e' : '#64748b';
+        ctx.fillText(`${label}:${high ? 'H' : 'L'}`, -15, -28 + index * 14);
+      });
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('GND', -15, 18);
+      ctx.fillStyle = colors.text;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText('LOGIC', 8, 44);
+      break;
+    }
+
+    case 'net_label': {
+      const label = String(comp.properties.netName?.value || 'NET').toUpperCase();
+      ctx.beginPath();
+      ctx.moveTo(-28, 0);
+      ctx.lineTo(-8, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.roundRect(-8, -10, 48, 20, 4);
+      ctx.fillStyle = theme === 'dark' ? '#1e293b' : '#eff6ff';
+      ctx.fill();
+      ctx.strokeStyle = isSelected ? colors.selected : '#3b82f6';
+      ctx.stroke();
+      ctx.fillStyle = theme === 'dark' ? '#93c5fd' : '#1d4ed8';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(label.slice(0, 8), 16, 3);
       break;
     }
 

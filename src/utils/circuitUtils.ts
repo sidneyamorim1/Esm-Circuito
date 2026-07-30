@@ -55,14 +55,25 @@ function getDefaultProperties(type: string): Record<string, ComponentProperty> {
       };
       break;
     case 'source_dc':
+    case 'bench_supply':
       props.voltage = {
         name: 'voltage',
-        label: 'Tensão DC',
+        label: type === 'bench_supply' ? 'Tensão Ajustável' : 'Tensão DC',
         value: 5,
         unit: 'V',
         type: 'number',
         description: 'Tensão contínua fornecida'
       };
+      if (type === 'bench_supply') {
+        props.currentLimit = {
+          name: 'currentLimit',
+          label: 'Limite de Corrente',
+          value: 1,
+          unit: 'A',
+          type: 'number',
+          description: 'Corrente máxima permitida pela fonte de bancada'
+        };
+      }
       break;
     case 'source_ac':
       props.amplitude = {
@@ -301,6 +312,35 @@ function getDefaultProperties(type: string): Record<string, ComponentProperty> {
         description: 'Tensão necessária para atracar o relé'
       };
       break;
+    case 'multimeter':
+      props.mode = {
+        name: 'mode',
+        label: 'Modo de Medição',
+        value: 'voltage',
+        type: 'select',
+        options: ['voltage', 'current', 'continuity'],
+        description: 'Seleciona medição de tensão, corrente ou continuidade'
+      };
+      break;
+    case 'logic_analyzer':
+      props.threshold = {
+        name: 'threshold',
+        label: 'Limiar Lógico',
+        value: 2.5,
+        unit: 'V',
+        type: 'number',
+        description: 'Tensão mínima para considerar nível lógico alto'
+      };
+      break;
+    case 'net_label':
+      props.netName = {
+        name: 'netName',
+        label: 'Nome da Rede',
+        value: 'VCC',
+        type: 'text',
+        description: 'Terminais com o mesmo nome de rede são conectados eletricamente'
+      };
+      break;
   }
 
   return props;
@@ -323,11 +363,25 @@ function getDefaultTerminals(type: string): { id: string; relX: number; relY: nu
     ];
   }
 
-  if (type === 'source_dc' || type === 'source_ac' || type === 'source_pulse' || type === 'function_generator' || type === 'source_current' || type === 'voltmeter' || type === 'ammeter') {
+  if (type === 'source_dc' || type === 'bench_supply' || type === 'source_ac' || type === 'source_pulse' || type === 'function_generator' || type === 'source_current' || type === 'voltmeter' || type === 'ammeter' || type === 'multimeter') {
     return [
       { id: 'p', relX: -2, relY: 0, label: '+' },
       { id: 'n', relX: 2, relY: 0, label: '-' }
     ];
+  }
+
+  if (type === 'logic_analyzer') {
+    return [
+      { id: 'd0', relX: -3, relY: -2, label: 'D0' },
+      { id: 'd1', relX: -3, relY: -1, label: 'D1' },
+      { id: 'd2', relX: -3, relY: 0, label: 'D2' },
+      { id: 'd3', relX: -3, relY: 1, label: 'D3' },
+      { id: 'gnd', relX: -3, relY: 2, label: 'GND' }
+    ];
+  }
+
+  if (type === 'net_label') {
+    return [{ id: 'net', relX: 0, relY: 0, label: 'NET' }];
   }
 
   if (type === 'oscilloscope') {
@@ -407,6 +461,7 @@ export function createCircuitComponent(
     ground: 'Terra',
     resistor: 'Resistor',
     source_dc: 'Fonte DC',
+    bench_supply: 'Fonte de Bancada',
     source_ac: 'Gerador AC',
     source_pulse: 'Pulso',
     function_generator: 'Gerador de Funções',
@@ -425,6 +480,9 @@ export function createCircuitComponent(
     ammeter: 'Amperímetro',
     voltmeter: 'Voltímetro',
     oscilloscope: 'Osciloscópio',
+    multimeter: 'Multímetro',
+    logic_analyzer: 'Analisador Lógico',
+    net_label: 'Net Label',
     probe_dc: 'Ponta de Prova DC',
     probe_ac: 'Ponta de Prova AC',
     pot: 'Potenciômetro',
