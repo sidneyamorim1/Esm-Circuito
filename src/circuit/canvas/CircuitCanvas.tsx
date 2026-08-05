@@ -4,7 +4,7 @@ import { drawGrid, drawComponent, drawWires, GRID_SIZE } from './renderer';
 import { createCircuitComponent, formatSiValue, parseSiValue, updateComponentTerminals } from '../../utils/circuitUtils';
 import { simulationManager } from '../../simulation/workers/workerInterface';
 import type { CircuitComponent, CircuitWire, ComponentProperty } from '../../types/circuit';
-import { Copy, Clipboard as PasteIcon, Trash2, RotateCw, Layers, Sliders } from 'lucide-react';
+import { Clipboard as PasteIcon, Trash2, RotateCw, RotateCcw, Layers, Sliders, Move, ArrowLeftRight, ArrowUpDown } from 'lucide-react';
 
 export default function CircuitCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -97,7 +97,7 @@ export default function CircuitCanvas() {
     gridX: number;
     gridY: number;
   } | null>(null);
-  const [clipboard, setClipboard] = useState<CircuitComponent | null>(null);
+  const [clipboard, _setClipboard] = useState<CircuitComponent | null>(null);
   const [isHoveringTerminal, setIsHoveringTerminal] = useState(false);
   const lastMouseClientPosRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -704,13 +704,13 @@ export default function CircuitCanvas() {
     setContextMenu(null);
   };
 
-  const handleRotateLabelAction = (compId: string, deltaRotation: number = 90) => {
-    const comp = components.find(c => c.id === compId);
-    if (!comp) return;
-    const nextRotation = (((comp.labelRotation ?? 0) + deltaRotation) % 360 + 360) % 360;
-    updateComponentLabelRotation(compId, nextRotation);
-    setContextMenu(null);
-  };
+  // const handleRotateLabelAction = (compId: string, deltaRotation: number = 90) => {
+  //   const comp = components.find(c => c.id === compId);
+  //   if (!comp) return;
+  //   const nextRotation = (((comp.labelRotation ?? 0) + deltaRotation) % 360 + 360) % 360;
+  //   updateComponentLabelRotation(compId, nextRotation);
+  //   setContextMenu(null);
+  // };
 
   const getActiveSelection = () => {
     const componentIds = selectedComponentIds.length > 0
@@ -752,59 +752,59 @@ export default function CircuitCanvas() {
     return true;
   };
 
-  const isContextComponentInMultiSelection = (componentId: string) =>
-    selectedComponentIds.length > 1 && selectedComponentIds.includes(componentId);
+  // const isContextComponentInMultiSelection = (componentId: string) =>
+  //   selectedComponentIds.length > 1 && selectedComponentIds.includes(componentId);
 
-  const handleCopyAction = (compId: string) => {
-    const selectedComponentSet = new Set(selectedComponentIds);
-    const componentIds = selectedComponentSet.has(compId) && selectedComponentIds.length > 0
-      ? selectedComponentIds
-      : [compId];
-    const wireIds = selectedWireIds.length > 0 ? selectedWireIds : [];
+  // const handleCopyAction = (compId: string) => {
+  //   const selectedComponentSet = new Set(selectedComponentIds);
+  //   const componentIds = selectedComponentSet.has(compId) && selectedComponentIds.length > 0
+  //     ? selectedComponentIds
+  //     : [compId];
+  //   const wireIds = selectedWireIds.length > 0 ? selectedWireIds : [];
+  // 
+  //   copyStoreItems(componentIds, wireIds);
+  // 
+  //   const comp = components.find(c => c.id === compId);
+  //   if (comp) {
+  //     const copiedComp = JSON.parse(JSON.stringify(comp));
+  //     setClipboard(copiedComp);
+  //     useStore.setState({
+  //       clipboard: {
+  //         components: [copiedComp],
+  //         wires: []
+  //       }
+  //     });
+  //   }
+  //   setContextMenu(null);
+  // };
 
-    copyStoreItems(componentIds, wireIds);
-
-    const comp = components.find(c => c.id === compId);
-    if (comp) {
-      const copiedComp = JSON.parse(JSON.stringify(comp));
-      setClipboard(copiedComp);
-      useStore.setState({
-        clipboard: {
-          components: [copiedComp],
-          wires: []
-        }
-      });
-    }
-    setContextMenu(null);
-  };
-
-  const handleDuplicateAction = (compId: string) => {
-    const comp = components.find(c => c.id === compId);
-    if (!comp) return;
-
-    const timestamp = Date.now().toString(36);
-    const randomStr = Math.random().toString(36).substring(2, 5);
-    const newId = `${comp.type}_${timestamp}_${randomStr}`;
-
-    const duplicatedComp: CircuitComponent = {
-      ...comp,
-      id: newId,
-      name: `${comp.name.split(' ')[0]} ${randomStr.toUpperCase()}`,
-      x: comp.x + 2,
-      y: comp.y + 2,
-      properties: JSON.parse(JSON.stringify(comp.properties)),
-      terminals: comp.terminals.map(term => ({
-        ...term,
-        x: comp.x + 2 + term.relX,
-        y: comp.y + 2 + term.relY
-      }))
-    };
-
-    const updated = updateComponentTerminals(duplicatedComp);
-    addComponent(updated);
-    setSelectedComponentId(updated.id);
-    setContextMenu(null);
-  };
+  // const handleDuplicateAction = (compId: string) => {
+  //   const comp = components.find(c => c.id === compId);
+  //   if (!comp) return;
+  // 
+  //   const timestamp = Date.now().toString(36);
+  //   const randomStr = Math.random().toString(36).substring(2, 5);
+  //   const newId = `${comp.type}_${timestamp}_${randomStr}`;
+  // 
+  //   const duplicatedComp: CircuitComponent = {
+  //     ...comp,
+  //     id: newId,
+  //     name: `${comp.name.split(' ')[0]} ${randomStr.toUpperCase()}`,
+  //     x: comp.x + 2,
+  //     y: comp.y + 2,
+  //     properties: JSON.parse(JSON.stringify(comp.properties)),
+  //     terminals: comp.terminals.map(term => ({
+  //       ...term,
+  //       x: comp.x + 2 + term.relX,
+  //       y: comp.y + 2 + term.relY
+  //     }))
+  //   };
+  // 
+  //   const updated = updateComponentTerminals(duplicatedComp);
+  //   addComponent(updated);
+  //   setSelectedComponentId(updated.id);
+  //   setContextMenu(null);
+  // };
 
   const handleRemoveAction = (compId: string) => {
     removeComponent(compId);
