@@ -6,23 +6,24 @@ import { getPcbConnections, getPcbPhysicalComponents } from './pcbNetlist';
 const PX_PER_UNIT = 32;
 const MIN_ZOOM = 0.45;
 const MAX_ZOOM = 2.8;
-const TOP_COPPER = '#f4d21f';
-const BOTTOM_COPPER = '#1d3dff';
-const AIRWIRE = 'rgba(34,197,94,0.55)';
-const PROTEUS_BG = '#02040a';
-const PROTEUS_GRID_MAJOR = 'rgba(148,163,184,0.34)';
-const PROTEUS_GRID_MINOR = 'rgba(148,163,184,0.14)';
-const PROTEUS_OUTLINE = '#d6d326';
-const PROTEUS_SILK = '#22f4ff';
-const PROTEUS_PAD = '#d51bd6';
-const PROTEUS_PAD_HOLE = '#9ca3af';
+const TOP_COPPER = '#FF0000';     // Classic Proteus Red
+const BOTTOM_COPPER = '#0000FF';  // Classic Proteus Blue
+const AIRWIRE = '#00FF00';        // Classic Proteus Green Ratsnest
+const PROTEUS_BG = '#000000';     // Black background
+const PROTEUS_GRID_MAJOR = '#222222';
+const PROTEUS_GRID_MINOR = '#111111';
+const PROTEUS_OUTLINE = '#FFFF00'; // Yellow outline
+const PROTEUS_SILK = '#00FFFF';    // Classic Cyan Silk
+const PROTEUS_PAD = '#FF00FF';     // Magenta pads
+const PROTEUS_PAD_HOLE = '#000000'; // Black holes
+
 const ROUTE_COLOR_PRESETS = [
-  { label: 'Top amarelo', value: TOP_COPPER },
-  { label: 'Bottom azul', value: BOTTOM_COPPER },
-  { label: 'Vermelho', value: '#ef4444' },
-  { label: 'Verde', value: '#22c55e' },
-  { label: 'Ciano', value: '#22f4ff' },
-  { label: 'Branco', value: '#f8fafc' }
+  { label: 'Top Copper (Red)', value: TOP_COPPER },
+  { label: 'Bottom Copper (Blue)', value: BOTTOM_COPPER },
+  { label: 'Inner 1', value: '#008000' },
+  { label: 'Inner 2', value: '#800080' },
+  { label: 'Silk', value: PROTEUS_SILK },
+  { label: 'White', value: '#ffffff' }
 ];
 
 type PcbLayer = 'top' | 'bottom';
@@ -1002,11 +1003,6 @@ export default function PcbLayoutEditor({
         }
       });
 
-      ctx.fillStyle = PROTEUS_SILK;
-      ctx.font = `bold ${Math.max(8, 9 * zoom)}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText(comp.name.replace(/\s+[A-Z0-9]{3}$/i, ''), screen.x, screen.y + 34 * zoom);
     });
 
     const issues = getDrcIssues();
