@@ -1002,19 +1002,20 @@ export function drawComponent(
 
       // Fios e pinos
       ctx.beginPath();
-      for (let x = -60; x <= 80; x += 20) {
-        ctx.moveTo(x, 60);
+      for (let i = 0; i < 8; i++) {
+        const x = -48 + i * 16;
+        ctx.moveTo(x, 64);
         ctx.lineTo(x, 80);
       }
       ctx.moveTo(0, -80);
-      ctx.lineTo(0, -60);
+      ctx.lineTo(0, -64);
       ctx.stroke();
       
       // Cores color squares at bottom
       for (let i = 0; i < 8; i++) {
-        const x = -64 + i * 20;
+        const x = -48 + i * 16;
         ctx.fillStyle = litSegments.includes(['a','b','c','d','e','f','g','dp'][i]) ? '#ff3333' : '#3333ff';
-        ctx.fillRect(x, 64, 8, 8);
+        ctx.fillRect(x - 4, 60, 8, 8);
       }
       break;
     }
@@ -1614,9 +1615,9 @@ export function drawComponent(
     case 'opamp_tl074': {
       const isDIP14 = comp.type === 'opamp_tl074';
       const width = 48;
-      const height = isDIP14 ? 120 : 64; // 14 pinos = 7 por lado vs 8 pinos = 4 por lado
+      const height = isDIP14 ? 224 : 128; // height adapted for pin spacing
       const pinsPerSide = isDIP14 ? 7 : 4;
-      const pinSpacing = 16;
+      const pinSpacing = 32; // match relY terminal spacing (2 grid units)
       const startY = -((pinsPerSide - 1) * pinSpacing) / 2;
 
       // Pinos metálicos do DIP
@@ -1624,10 +1625,10 @@ export function drawComponent(
       for (let i = 0; i < pinsPerSide; i++) {
         const y = startY + i * pinSpacing;
         // Lado Esquerdo
-        ctx.moveTo(-width/2 - 12, y);
+        ctx.moveTo(-48, y);
         ctx.lineTo(-width/2, y);
         // Lado Direito
-        ctx.moveTo(width/2 + 12, y);
+        ctx.moveTo(48, y);
         ctx.lineTo(width/2, y);
       }
       ctx.stroke();
