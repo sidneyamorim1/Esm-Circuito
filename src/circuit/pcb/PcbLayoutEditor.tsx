@@ -648,9 +648,12 @@ export default function PcbLayoutEditor({
     isSelected: boolean
   ) => {
     const silk = isSelected ? '#ffffff' : PROTEUS_SILK;
-    const ink = PROTEUS_SILK;
     const footprint = getFootprintSpec(comp);
-    const label = footprint.ref;
+    
+    // Para identificar qual o nome de referência (R, C, U, etc)
+    // Se o usuário renomear o componente, usamos o nome dele se for curto (ex: R1, U2), senão usamos a ref base
+    const isShortName = comp.name.length <= 4 && /^[a-zA-Z]+\d+$/.test(comp.name);
+    const label = isShortName ? comp.name : footprint.ref;
 
     ctx.save();
     ctx.translate(screen.x, screen.y);
@@ -666,132 +669,91 @@ export default function PcbLayoutEditor({
       return;
     }
 
-    if (footprint.kind === 'testpoint') {
-      ctx.beginPath();
-      ctx.arc(0, 0, 13 * zoom, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-8 * zoom, 0);
-      ctx.lineTo(8 * zoom, 0);
-      ctx.moveTo(0, -8 * zoom);
-      ctx.lineTo(0, 8 * zoom);
-      ctx.stroke();
-      ctx.font = `bold ${7 * zoom}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, 0, 21 * zoom);
-      ctx.restore();
-      return;
-    }
-
-    if (footprint.kind === 'terminal') {
-      ctx.fillStyle = 'rgba(34,244,255,0.08)';
-      ctx.strokeStyle = silk;
-      ctx.lineWidth = Math.max(1.4, 1.8 * zoom);
-      ctx.beginPath();
-      ctx.roundRect(-23 * zoom, -17 * zoom, 46 * zoom, 34 * zoom, 3 * zoom);
-      ctx.fill();
-      ctx.stroke();
-      ctx.fillStyle = silk;
-      ctx.font = `bold ${7 * zoom}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('TERM', 0, 0);
-      ctx.restore();
-      return;
-    }
-
-    if (footprint.kind === 'axial') {
-      ctx.strokeStyle = silk;
-      ctx.strokeRect(-18 * zoom, -7 * zoom, 36 * zoom, 14 * zoom);
-      ctx.beginPath();
-      ctx.moveTo(-30 * zoom, 0);
-      ctx.lineTo(-18 * zoom, 0);
-      ctx.moveTo(18 * zoom, 0);
-      ctx.lineTo(30 * zoom, 0);
-      ctx.stroke();
-      ctx.fillStyle = silk;
-      ctx.font = `bold ${7 * zoom}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, 0, 0);
-      ctx.restore();
-      return;
-    }
-
-    if (footprint.kind === 'diode') {
-      ctx.strokeStyle = silk;
-      ctx.strokeRect(-18 * zoom, -7 * zoom, 36 * zoom, 14 * zoom);
-      ctx.beginPath();
-      ctx.moveTo(-30 * zoom, 0);
-      ctx.lineTo(-18 * zoom, 0);
-      ctx.moveTo(18 * zoom, 0);
-      ctx.lineTo(30 * zoom, 0);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(12 * zoom, -10 * zoom);
-      ctx.lineTo(12 * zoom, 10 * zoom);
-      ctx.stroke();
-      ctx.fillStyle = silk;
-      ctx.font = `bold ${6.5 * zoom}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, -2 * zoom, 0);
-      ctx.restore();
-      return;
-    }
-
-    if (footprint.kind === 'capacitor') {
-      ctx.beginPath();
-      ctx.moveTo(-8 * zoom, -13 * zoom);
-      ctx.lineTo(-8 * zoom, 13 * zoom);
-      ctx.moveTo(8 * zoom, -13 * zoom);
-      ctx.lineTo(8 * zoom, 13 * zoom);
-      ctx.moveTo(-30 * zoom, 0);
-      ctx.lineTo(-8 * zoom, 0);
-      ctx.moveTo(8 * zoom, 0);
-      ctx.lineTo(30 * zoom, 0);
-      ctx.stroke();
-      ctx.fillText(label, 0, 23 * zoom);
-      ctx.restore();
-      return;
-    }
-
-    if (footprint.kind === 'ic') {
-      ctx.strokeStyle = silk;
-      ctx.fillStyle = isSelected ? 'rgba(219,234,254,0.35)' : 'rgba(15,23,42,0.22)';
-      ctx.beginPath();
-      ctx.roundRect(-24 * zoom, -16 * zoom, 48 * zoom, 32 * zoom, 3 * zoom);
-      ctx.fill();
-      ctx.stroke();
-      for (let i = 0; i < 3; i++) {
-        const y = (-10 + i * 10) * zoom;
-        ctx.beginPath();
-        ctx.moveTo(-30 * zoom, y);
-        ctx.lineTo(-24 * zoom, y);
-        ctx.moveTo(24 * zoom, y);
-        ctx.lineTo(30 * zoom, y);
-        ctx.stroke();
-      }
-      ctx.fillStyle = silk;
-      ctx.font = `bold ${8 * zoom}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, 0, 0);
-      ctx.restore();
-      return;
-    }
-
-    ctx.strokeStyle = silk;
-    ctx.fillStyle = isSelected ? 'rgba(34,244,255,0.18)' : 'rgba(34,244,255,0.06)';
-    ctx.beginPath();
-    ctx.roundRect(-22 * zoom, -14 * zoom, 44 * zoom, 28 * zoom, 3 * zoom);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = ink;
-    ctx.font = `bold ${8 * zoom}px monospace`;
+    ctx.font = `bold ${Math.max(9, 10 * zoom)}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+
+    const padRadius = Math.max(3, (solderPadDiameter / 20) * PX_PER_UNIT * zoom);
+    const clearance = padRadius + 4 * zoom;
+
+    // Calcular bounding box local dos terminais
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    if (comp.terminals.length > 0) {
+      const xs = comp.terminals.map(t => (t.relX * 0.35) * PX_PER_UNIT * zoom);
+      const ys = comp.terminals.map(t => (t.relY * 0.35) * PX_PER_UNIT * zoom);
+      minX = Math.min(...xs);
+      maxX = Math.max(...xs);
+      minY = Math.min(...ys);
+      maxY = Math.max(...ys);
+    }
+
+    // Componentes de 2 terminais (Axiais: Resistores, Diodos, Capacitores, etc)
+    if (comp.terminals.length === 2 && footprint.kind !== 'testpoint' && footprint.kind !== 'terminal') {
+      const t1 = { x: (comp.terminals[0].relX * 0.35) * PX_PER_UNIT * zoom, y: (comp.terminals[0].relY * 0.35) * PX_PER_UNIT * zoom };
+      const t2 = { x: (comp.terminals[1].relX * 0.35) * PX_PER_UNIT * zoom, y: (comp.terminals[1].relY * 0.35) * PX_PER_UNIT * zoom };
+      
+      const dx = t2.x - t1.x;
+      const dy = t2.y - t1.y;
+      const length = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx);
+
+      ctx.save();
+      ctx.rotate(angle);
+      
+      const bodyLength = Math.max(8 * zoom, length - clearance * 2);
+      const bodyWidth = Math.max(12 * zoom, length * 0.25);
+
+      if (footprint.kind === 'diode') {
+        ctx.strokeRect(-bodyLength/2, -bodyWidth/2, bodyLength, bodyWidth);
+        // Marca do cátodo
+        ctx.beginPath();
+        ctx.moveTo(bodyLength/2 - 4 * zoom, -bodyWidth/2);
+        ctx.lineTo(bodyLength/2 - 4 * zoom, bodyWidth/2);
+        ctx.stroke();
+      } else if (footprint.kind === 'capacitor') {
+        // Capacitor footprint no ARES (duas placas)
+        ctx.beginPath();
+        ctx.moveTo(-3 * zoom, -bodyWidth/2);
+        ctx.lineTo(-3 * zoom, bodyWidth/2);
+        ctx.moveTo(3 * zoom, -bodyWidth/2);
+        ctx.lineTo(3 * zoom, bodyWidth/2);
+        ctx.stroke();
+      } else {
+        // Resistor (Caixa simples)
+        ctx.strokeRect(-bodyLength/2, -bodyWidth/2, bodyLength, bodyWidth);
+      }
+      
+      ctx.restore();
+      ctx.fillText(label, 0, -(bodyWidth/2 + 8 * zoom));
+      ctx.restore();
+      return;
+    }
+
+    // Terminais (Borneira, Fonte) e Testpoints
+    if (footprint.kind === 'terminal' || footprint.kind === 'testpoint') {
+      const w = Math.max(maxX - minX + clearance * 2, 24 * zoom);
+      const h = Math.max(maxY - minY + clearance * 2, 24 * zoom);
+      ctx.strokeRect(minX - clearance, minY - clearance, w, h);
+      ctx.fillText(label, 0, minY - clearance - 8 * zoom);
+      ctx.restore();
+      return;
+    }
+
+    // Transistores e CIs (> 2 terminais)
+    const w = Math.max(maxX - minX + clearance, 16 * zoom);
+    const h = Math.max(maxY - minY + clearance, 16 * zoom);
+    
+    // O silk envolve todos os pads, mas com margem
+    // Em CIs tipo DIP, a caixa envelopa os pinos
+    ctx.strokeRect(minX - padRadius, minY - padRadius, w + padRadius*2, h + padRadius*2);
+    
+    // Marca do pino 1 (notch no centro superior)
+    if (comp.terminals.length >= 4) {
+      ctx.beginPath();
+      ctx.arc(0, minY - padRadius, 4 * zoom, 0, Math.PI);
+      ctx.stroke();
+    }
+
     ctx.fillText(label, 0, 0);
     ctx.restore();
   };
