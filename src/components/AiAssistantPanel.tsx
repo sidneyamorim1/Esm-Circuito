@@ -189,7 +189,31 @@ export default function AiAssistantPanel({ isOpen, onClose, onLoadCircuit, curre
       if (currentProvider === 'azure_foundry' && !forceLocal) {
         const circuitCtx = buildCircuitContext(components, wires);
         
-        const aiText = await queryAzureFoundryApi(currentKey, currentEndpoint, prompt, circuitCtx);
+        // Em produção, usar a Netlify Serverless Function (chave fica no servidor)
+        // Em desenvolvimento, usar o proxy do Vite
+        const isDev = import.meta.env.DEV;
+        let aiText: string;
+
+        if (!isDev) {
+          // PRODUÇÃO: Netlify Function — API key fica no servidor
+          const proxyRes = await fetch('/api/ai-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, circuitContext: circuitCtx }),
+          });
+          
+          const proxyData = await proxyRes.json();
+          
+          if (!proxyRes.ok || proxyData.error) {
+            throw new Error(proxyData.error || `Erro do servidor (HTTP ${proxyRes.status})`);
+          }
+          
+          aiText = proxyData.response;
+        } else {
+          // DESENVOLVIMENTO: Vite proxy direto
+          aiText = await queryAzureFoundryApi(currentKey, currentEndpoint, prompt, circuitCtx);
+        }
+
         const generated = generateCircuitFromPrompt(prompt);
 
         setMessages(prev => [
