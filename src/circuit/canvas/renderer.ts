@@ -190,28 +190,66 @@ export function drawComponent(
       break;
     }
 
-    case 'resistor': {
-      // Resistor Estilo Proteus (Caixa Retangular)
-      ctx.beginPath();
+    case 'resistor':
+    case 'resistor_5w':
+    case 'resistor_smd': {
       // Conexões laterais
+      ctx.beginPath();
       ctx.moveTo(-40, 0);
-      ctx.lineTo(-20, 0);
-      ctx.moveTo(20, 0);
+      ctx.lineTo(comp.type === 'resistor_smd' ? -10 : -20, 0);
+      ctx.moveTo(comp.type === 'resistor_smd' ? 10 : 20, 0);
       ctx.lineTo(40, 0);
       ctx.stroke();
       
       // Corpo retângulo
       ctx.beginPath();
-      ctx.rect(-20, -8, 40, 16);
-      ctx.fillStyle = colors.bg;
-      ctx.fill();
-      ctx.stroke();
+      if (comp.type === 'resistor_5w') {
+        // Resistor de fio 5W (Cerâmico Branco)
+        ctx.rect(-24, -10, 48, 20);
+        ctx.fillStyle = '#f8fafc'; // Branco cerâmico
+        ctx.fill();
+        ctx.stroke();
+        // Detalhes nas pontas
+        ctx.strokeRect(-24, -10, 6, 20);
+        ctx.strokeRect(18, -10, 6, 20);
+      } else if (comp.type === 'resistor_smd') {
+        // Resistor SMD (Preto, pequeno, contatos metálicos na ponta)
+        ctx.rect(-10, -6, 20, 12);
+        ctx.fillStyle = '#0f172a'; // Preto profundo
+        ctx.fill();
+        ctx.stroke();
+        // Contatos prata
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillRect(-10, -6, 3, 12);
+        ctx.fillRect(7, -6, 3, 12);
+      } else {
+        // Resistor Estilo Proteus comum
+        ctx.rect(-20, -8, 40, 16);
+        ctx.fillStyle = colors.bg;
+        ctx.fill();
+        ctx.stroke();
+      }
 
       // Label do valor e Referência
       const rVal = comp.properties.resistance?.value ?? 1000;
       let labelText = `${rVal}Ω`;
       if (Number(rVal) >= 1e6) labelText = `${(Number(rVal) / 1e6).toFixed(1)}M`;
       else if (Number(rVal) >= 1e3) labelText = `${(Number(rVal) / 1e3).toFixed(1)}k`;
+
+      if (comp.type === 'resistor_smd') {
+        // Código numérico clássico no SMD (ex: 103)
+        let smdLabel = '102'; // default 1k
+        if (Number(rVal) < 100) smdLabel = rVal.toString() + 'R';
+        else {
+           const str = Number(rVal).toString();
+           if (str.length > 1) {
+             const base = str.substring(0, 2);
+             const zeros = str.length - 2;
+             smdLabel = base + zeros;
+           }
+        }
+        labelText = smdLabel;
+      }
 
       // Desenha texto sem espelhamento
       ctx.save();
@@ -441,48 +479,71 @@ export function drawComponent(
     case 'capacitor':
     case 'capacitor_ceramic':
     case 'capacitor_polyester': {
-      // Duas placas paralelas separadas
+      // Conexões externas
       ctx.beginPath();
       ctx.moveTo(-40, 0);
-      ctx.lineTo(-6, 0);
-      ctx.moveTo(6, 0);
+      ctx.lineTo(-12, 0);
+      ctx.moveTo(12, 0);
       ctx.lineTo(40, 0);
+      ctx.stroke();
       
       if (comp.type === 'capacitor') {
-        // Eletrolítico: placa positiva reta, negativa curva
-        // Positiva (T1)
-        ctx.moveTo(-6, -14);
-        ctx.lineTo(-6, 14);
-        // Negativa (T2)
-        ctx.moveTo(6, -14);
-        ctx.quadraticCurveTo(12, 0, 6, 14);
+        // Eletrolítico estilo Proteus ISIS
+        // Placa Positiva (Esquerda) - Retângulo bege
+        ctx.beginPath();
+        ctx.rect(-12, -14, 6, 28);
+        ctx.fillStyle = '#e0ddc9'; // Bege
+        ctx.fill();
+        ctx.stroke();
         
-        // Sinal +
-        ctx.moveTo(-20, -10);
-        ctx.lineTo(-14, -10);
-        ctx.moveTo(-17, -13);
-        ctx.lineTo(-17, -7);
+        // Placa Negativa (Direita) - Retângulo hachurado
+        ctx.beginPath();
+        ctx.rect(6, -14, 6, 28);
+        ctx.fillStyle = colors.bg;
+        ctx.fill();
+        ctx.stroke();
+        
+        // Hachuras diagonais da placa negativa
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(6, -14, 6, 28);
+        ctx.clip();
+        ctx.beginPath();
+        for (let y = -24; y <= 24; y += 4) {
+          ctx.moveTo(6, y);
+          ctx.lineTo(12, y - 6);
+        }
+        ctx.stroke();
+        ctx.restore();
       } else {
-        // Cerâmico/Poliéster: Placas retas
+        // Cerâmico/Poliéster: Placas retas simples
+        ctx.beginPath();
         ctx.moveTo(-6, -14);
         ctx.lineTo(-6, 14);
         ctx.moveTo(6, -14);
         ctx.lineTo(6, 14);
+        ctx.stroke();
+        // Prolonga os fios até as placas
+        ctx.beginPath();
+        ctx.moveTo(-12, 0);
+        ctx.lineTo(-6, 0);
+        ctx.moveTo(12, 0);
+        ctx.lineTo(6, 0);
+        ctx.stroke();
       }
-      ctx.stroke();
 
       // Label do valor (texto sem espelhamento)
       const cVal = comp.properties.capacitance?.value ?? 1e-6;
-      let labelText = `${Number(cVal)*1e6}μF`;
+      let labelText = `${Number(cVal)*1e6}uF`;
       if (Number(cVal) < 1e-6) labelText = `${Number(cVal)*1e9}nF`;
       if (Number(cVal) < 1e-9) labelText = `${Number(cVal)*1e12}pF`;
 
       ctx.save();
-      ctx.translate(0, 24);
+      ctx.translate(0, 26);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
       ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
       ctx.fillStyle = colors.text;
-      ctx.font = '9px font-mono';
+      ctx.font = '10px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(labelText, 0, 0);
       ctx.restore();
@@ -490,22 +551,22 @@ export function drawComponent(
     }
 
     case 'transistor_bjt_npn':
-    case 'transistor_bjt_pnp': {
-      const isNpn = comp.type === 'transistor_bjt_npn';
+    case 'transistor_bjt_pnp':
+    case 'transistor_2sc5200':
+    case 'transistor_2sa1943':
+    case 'transistor_tip41':
+    case 'transistor_tip42': {
+      const isNpn = comp.type.includes('npn') || comp.type === 'transistor_2sc5200' || comp.type === 'transistor_tip41';
 
       // Terminal e Haste da Base (Esquerda)
       ctx.beginPath();
       ctx.moveTo(-40, 0);
-      ctx.lineTo(-10, 0);
+      ctx.lineTo(-14, 0);
       ctx.stroke();
 
-      // Placa Condutora da Base (Barra Vertical)
-      ctx.lineWidth = 3;
+      // Placa Condutora da Base (Retângulo Vertical estilo Proteus)
       ctx.beginPath();
-      ctx.moveTo(-10, -18);
-      ctx.lineTo(-10, 18);
-      ctx.stroke();
-      ctx.lineWidth = isSelected ? 2.5 : 1.8;
+      ctx.strokeRect(-14, -18, 4, 36);
 
       // Terminal Coletor (Cima - Topo)
       ctx.beginPath();
@@ -521,12 +582,7 @@ export function drawComponent(
       ctx.lineTo(-10, 10); // Haste diagonal do emissor
       ctx.stroke();
 
-      // Círculo envolvente do encapsulamento BJT (Estilo Proteus / TO-92)
-      ctx.beginPath();
-      ctx.arc(4, 0, 24, 0, 2 * Math.PI);
-      ctx.strokeStyle = isSelected ? colors.selected : (theme === 'dark' ? '#334155' : '#cbd5e1');
-      ctx.lineWidth = 1;
-      ctx.stroke();
+
 
       // Restaura cor principal para a seta
       ctx.strokeStyle = isSelected ? colors.selected : colors.component;
@@ -560,9 +616,15 @@ export function drawComponent(
 
       // Nome/Identificação do Transistor e Beta (hFE)
       const beta = comp.properties.beta?.value ?? 100;
+      let nameLabel = isNpn ? 'NPN' : 'PNP';
+      if (comp.type === 'transistor_2sc5200') nameLabel = '2SC5200';
+      if (comp.type === 'transistor_2sa1943') nameLabel = '2SA1943';
+      if (comp.type === 'transistor_tip41') nameLabel = 'TIP41';
+      if (comp.type === 'transistor_tip42') nameLabel = 'TIP42';
+
       ctx.font = '9px font-mono';
       ctx.textAlign = 'left';
-      ctx.fillText(isNpn ? 'NPN' : 'PNP', 32, -4);
+      ctx.fillText(nameLabel, 32, -4);
       ctx.fillStyle = colors.text;
       ctx.font = '8px font-mono';
       ctx.fillText(`β:${beta}`, 32, 8);
@@ -749,6 +811,372 @@ export function drawComponent(
       ctx.fillText('C1', -22, -23);
       ctx.fillText('C2', -22, 17);
       ctx.restore();
+      break;
+    }
+
+    case 'vcc_terminal': {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -10);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-8, -10);
+      ctx.lineTo(8, -10);
+      ctx.lineTo(0, -20);
+      ctx.closePath();
+      ctx.fillStyle = isSelected ? colors.selected : '#ef4444'; // Red arrow
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = colors.text;
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('+5V', 0, -26);
+      break;
+    }
+
+    case 'audio_in': {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-12, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#22d3ee';
+      ctx.fill();
+      ctx.stroke();
+      // Ícone falante miniatura azul
+      ctx.beginPath();
+      ctx.moveTo(-18, -4);
+      ctx.lineTo(-14, -4);
+      ctx.lineTo(-8, -8);
+      ctx.lineTo(-8, 8);
+      ctx.lineTo(-14, 4);
+      ctx.lineTo(-18, 4);
+      ctx.closePath();
+      ctx.fillStyle = '#3b82f6';
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+
+    case 'lamp': {
+      ctx.beginPath();
+      ctx.moveTo(0, -40);
+      ctx.lineTo(0, -20);
+      ctx.moveTo(0, 40);
+      ctx.lineTo(0, 20);
+      ctx.stroke();
+      
+      // Globo da lâmpada
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, 2 * Math.PI);
+      ctx.fillStyle = theme === 'dark' ? '#020617' : '#1e293b'; // Preto translúcido/sólido
+      ctx.fill();
+      ctx.stroke();
+
+      // Filamento ziguezague
+      ctx.beginPath();
+      ctx.moveTo(0, -20);
+      ctx.lineTo(0, -12);
+      ctx.bezierCurveTo(-15, -6, 15, 6, 0, 12);
+      ctx.lineTo(0, 20);
+      ctx.strokeStyle = '#fde047'; // Amarelo
+      ctx.stroke();
+
+      const isLit = (comp.simulationState?.custom?.isLit ?? false);
+      if (isLit) {
+        ctx.save();
+        ctx.strokeStyle = '#fef08a'; // Amarelo brilhante
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#fef08a';
+        ctx.shadowBlur = 12;
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * Math.PI) / 4;
+          const px1 = Math.cos(angle) * 26;
+          const py1 = Math.sin(angle) * 26;
+          const px2 = Math.cos(angle) * 36;
+          const py2 = Math.sin(angle) * 36;
+          ctx.beginPath();
+          ctx.moveTo(px1, py1);
+          ctx.lineTo(px2, py2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      break;
+    }
+
+    case 'speaker': {
+      ctx.beginPath();
+      ctx.moveTo(0, -40);
+      ctx.lineTo(0, -20);
+      ctx.moveTo(0, 40);
+      ctx.lineTo(0, 20);
+      ctx.stroke();
+
+      // Base do alto-falante
+      ctx.beginPath();
+      ctx.rect(-10, -20, 20, 40);
+      ctx.fillStyle = colors.bg;
+      ctx.fill();
+      ctx.stroke();
+
+      // Cone
+      ctx.beginPath();
+      ctx.moveTo(10, -20);
+      ctx.lineTo(30, -32);
+      ctx.lineTo(30, 32);
+      ctx.lineTo(10, 20);
+      ctx.closePath();
+      ctx.fillStyle = colors.bg;
+      ctx.fill();
+      ctx.stroke();
+
+      // Ondas sonoras
+      const isPlaying = Math.abs(comp.simulationState?.voltage ?? 0) > 0.1;
+      ctx.strokeStyle = isPlaying ? '#ef4444' : colors.component;
+      ctx.lineWidth = isPlaying ? 3 : 2;
+      for (let i = 1; i <= 3; i++) {
+        ctx.beginPath();
+        ctx.arc(30, 0, i * 8, -Math.PI/3, Math.PI/3);
+        ctx.stroke();
+      }
+      
+      // Label
+      ctx.save();
+      ctx.fillStyle = colors.text;
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'center';
+      ctx.translate(0, 44);
+      if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
+      ctx.scale(comp.mirrorX ? -1 : 1, comp.mirrorY ? -1 : 1);
+      ctx.fillText('SPEAKER', 0, 0);
+      ctx.restore();
+      break;
+    }
+
+    case 'seven_segment': {
+      ctx.beginPath();
+      ctx.rect(-70, -80, 140, 160);
+      ctx.fillStyle = theme === 'dark' ? '#271010' : '#451010'; // Fundo vermelho muito escuro
+      ctx.fill();
+      ctx.stroke();
+
+      const litSegments = comp.simulationState?.custom?.litSegments || [];
+      const drawSeg = (id: string, pts: number[][]) => {
+        const isLit = litSegments.includes(id);
+        ctx.fillStyle = isLit ? '#ff0000' : (theme === 'dark' ? '#4a0b0b' : '#691515'); // Brilhante ou opaco
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.fill();
+        if (isLit) {
+          ctx.shadowColor = '#ff0000';
+          ctx.shadowBlur = 10;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+      };
+
+      // Segmentos Hexagonais (Aproximados para display de 7 segs clássico)
+      drawSeg('a', [[-24, -54], [24, -54], [18, -46], [-18, -46]]);
+      drawSeg('b', [[26, -52], [26, -8], [18, -12], [20, -44]]);
+      drawSeg('c', [[26, 8], [26, 52], [20, 44], [18, 12]]);
+      drawSeg('d', [[-24, 54], [24, 54], [18, 46], [-18, 46]]);
+      drawSeg('e', [[-26, 8], [-26, 52], [-20, 44], [-18, 12]]);
+      drawSeg('f', [[-26, -52], [-26, -8], [-18, -12], [-20, -44]]);
+      drawSeg('g', [[-20, -4], [20, -4], [16, 4], [-16, 4]]);
+      
+      const dpLit = litSegments.includes('dp');
+      ctx.fillStyle = dpLit ? '#ff0000' : (theme === 'dark' ? '#4a0b0b' : '#691515');
+      ctx.beginPath();
+      ctx.arc(38, 50, 6, 0, 2*Math.PI);
+      ctx.fill();
+      if (dpLit) {
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      // Fios e pinos
+      ctx.beginPath();
+      for (let x = -60; x <= 80; x += 20) {
+        ctx.moveTo(x, 60);
+        ctx.lineTo(x, 80);
+      }
+      ctx.moveTo(0, -80);
+      ctx.lineTo(0, -60);
+      ctx.stroke();
+      
+      // Cores color squares at bottom
+      for (let i = 0; i < 8; i++) {
+        const x = -64 + i * 20;
+        ctx.fillStyle = litSegments.includes(['a','b','c','d','e','f','g','dp'][i]) ? '#ff3333' : '#3333ff';
+        ctx.fillRect(x, 64, 8, 8);
+      }
+      break;
+    }
+
+    case 'regulator_7805': {
+      // 7805 TO-220 Voltage Regulator in 2D
+      ctx.beginPath();
+      ctx.rect(-30, -20, 60, 40);
+      ctx.fillStyle = theme === 'dark' ? '#1e293b' : '#cbd5e1';
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = colors.text;
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('7805', 0, 5);
+      
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('IN', -25, 15);
+      ctx.fillText('GND', 0, 15);
+      ctx.fillText('OUT', 25, 15);
+
+      // Pins
+      ctx.beginPath();
+      ctx.moveTo(-40, 0); ctx.lineTo(-30, 0); // IN
+      ctx.moveTo(0, 20); ctx.lineTo(0, 40);  // GND
+      ctx.moveTo(40, 0); ctx.lineTo(30, 0);  // OUT
+      ctx.stroke();
+      break;
+    }
+
+    case 'arduino_nano': {
+      ctx.beginPath();
+      ctx.rect(-80, -150, 160, 300);
+      ctx.fillStyle = theme === 'dark' ? '#1e3a8a' : '#1d4ed8'; // Nano blue
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      
+      ctx.save();
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('ARDUINO NANO', 0, 5);
+      ctx.restore();
+
+      const leftPins = ['TX1', 'RX0', 'RST', 'GND', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12'];
+      const rightPins = ['VIN', 'GND', 'RST', '5V', 'A7', 'A6', 'A5', 'A4', 'A3', 'A2', 'A1', 'A0', 'REF', '3V3', 'D13'];
+      
+      ctx.font = 'bold 10px monospace';
+      ctx.fillStyle = '#ffffff';
+      
+      ctx.textAlign = 'left';
+      for (let i = 0; i < 15; i++) {
+        ctx.fillText(leftPins[i], -70, -137 + i * 20);
+      }
+      
+      ctx.textAlign = 'right';
+      for (let i = 0; i < 15; i++) {
+        ctx.fillText(rightPins[i], 70, -137 + i * 20);
+      }
+
+      ctx.beginPath();
+      ctx.strokeStyle = colors.component;
+      for (let i = 0; i < 15; i++) {
+        ctx.moveTo(-100, -140 + i*20);
+        ctx.lineTo(-80, -140 + i*20);
+        ctx.moveTo(100, -140 + i*20);
+        ctx.lineTo(80, -140 + i*20);
+      }
+      ctx.stroke();
+      break;
+    }
+
+    case 'ic_7442': {
+      ctx.beginPath();
+      ctx.rect(-60, -110, 120, 220);
+      ctx.fillStyle = theme === 'dark' ? '#1e293b' : '#fef3c7'; // Proteus beige/yellowish
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = colors.text;
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('7442', 0, 0);
+
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('A', -50, -17);
+      ctx.fillText('B', -50, 3);
+      ctx.fillText('C', -50, 23);
+      ctx.fillText('D', -50, 43);
+      
+      ctx.textAlign = 'right';
+      for (let i = 0; i <= 9; i++) {
+        ctx.fillText(`${i}`, 50, -77 + i * 20);
+      }
+
+      // Fios de pinos externos
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        ctx.moveTo(-80, -20 + i*20);
+        ctx.lineTo(-60, -20 + i*20);
+      }
+      for (let i = 0; i <= 9; i++) {
+        ctx.moveTo(80, -80 + i*20);
+        ctx.lineTo(60, -80 + i*20);
+      }
+      ctx.stroke();
+      break;
+    }
+
+    case 'adc_0808': {
+      ctx.beginPath();
+      ctx.rect(-80, -190, 160, 380);
+      ctx.fillStyle = theme === 'dark' ? '#1e293b' : '#fef3c7';
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = colors.text;
+      ctx.font = 'bold 14px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('ADC0808', 0, 0);
+      
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      for (let i = 0; i < 8; i++) {
+        ctx.fillText(`IN${i}`, -70, -117 + i * 20);
+      }
+      ctx.fillText('ADD A', -70, 63);
+      ctx.fillText('ADD B', -70, 83);
+      ctx.fillText('ADD C', -70, 103);
+      ctx.fillText('ALE', -70, 123);
+      ctx.fillText('VREF+', -70, 163);
+      ctx.fillText('VREF-', -70, 183);
+
+      ctx.textAlign = 'right';
+      ctx.fillText('CLOCK', 70, -117);
+      ctx.fillText('START', 70, -97);
+      ctx.fillText('EOC', 70, -57);
+      for (let i = 1; i <= 8; i++) {
+        ctx.fillText(`OUT${i}`, 70, -37 + i * 20);
+      }
+      ctx.fillText('OE', 70, 163);
+
+      // Conexões
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        ctx.moveTo(-100, -120 + i*20);
+        ctx.lineTo(-80, -120 + i*20);
+      }
+      [-120, -100, -60, -20, 0, 20, 40, 60, 80, 100, 120, 160].forEach(y => {
+        ctx.moveTo(100, y);
+        ctx.lineTo(80, y);
+      });
+      [60, 80, 100, 120, 160, 180].forEach(y => {
+        ctx.moveTo(-100, y);
+        ctx.lineTo(-80, y);
+      });
+      ctx.stroke();
       break;
     }
 
@@ -1109,6 +1537,149 @@ export function drawComponent(
       break;
     }
 
+    case 'trimpot_multi': {
+      // Corpo do trimpot multivoltas (azul quadrado)
+      ctx.beginPath();
+      ctx.rect(-16, -16, 32, 32);
+      ctx.fillStyle = '#0ea5e9'; // Azul
+      ctx.fill();
+      ctx.stroke();
+
+      // Parafuso de latão no topo
+      ctx.beginPath();
+      ctx.arc(8, -8, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#fde047'; // Amarelo/Latão
+      ctx.fill();
+      ctx.stroke();
+      // Fenda do parafuso
+      ctx.beginPath();
+      ctx.moveTo(5, -8);
+      ctx.lineTo(11, -8);
+      ctx.stroke();
+
+      // Conexões
+      ctx.beginPath();
+      ctx.moveTo(-40, -20);
+      ctx.lineTo(-16, -20);
+      ctx.moveTo(-40, 20);
+      ctx.lineTo(-16, 20);
+      ctx.moveTo(40, 0);
+      ctx.lineTo(16, 0);
+      ctx.stroke();
+      
+      const setVal = comp.properties.setting?.value ?? 50;
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '8px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${setVal}%`, -12, 12);
+      break;
+    }
+
+    case 'diode_bridge': {
+      // Corpo quadrado preto/metálico (KBPC)
+      ctx.beginPath();
+      ctx.rect(-24, -24, 48, 48);
+      ctx.fillStyle = theme === 'dark' ? '#0f172a' : '#334155';
+      ctx.fill();
+      ctx.stroke();
+
+      // Furo do dissipador no meio
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, 0, Math.PI * 2);
+      ctx.fillStyle = colors.bg;
+      ctx.fill();
+      ctx.stroke();
+
+      // Pinos de conexão (AC1, POS, AC2, NEG)
+      ctx.beginPath();
+      ctx.moveTo(-40, -40); ctx.lineTo(-24, -24);
+      ctx.moveTo(40, -40); ctx.lineTo(24, -24);
+      ctx.moveTo(40, 40); ctx.lineTo(24, 24);
+      ctx.moveTo(-40, 40); ctx.lineTo(-24, 24);
+      ctx.stroke();
+
+      // Marcas
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('~', -16, -12);
+      ctx.fillText('+', 16, -12);
+      ctx.fillText('~', 16, 16);
+      ctx.fillText('-', -16, 16);
+      break;
+    }
+
+    case 'ic_555':
+    case 'opamp_tl072':
+    case 'opamp_tl074': {
+      const isDIP14 = comp.type === 'opamp_tl074';
+      const width = 48;
+      const height = isDIP14 ? 120 : 64; // 14 pinos = 7 por lado vs 8 pinos = 4 por lado
+      const pinsPerSide = isDIP14 ? 7 : 4;
+      const pinSpacing = 16;
+      const startY = -((pinsPerSide - 1) * pinSpacing) / 2;
+
+      // Pinos metálicos do DIP
+      ctx.beginPath();
+      for (let i = 0; i < pinsPerSide; i++) {
+        const y = startY + i * pinSpacing;
+        // Lado Esquerdo
+        ctx.moveTo(-width/2 - 12, y);
+        ctx.lineTo(-width/2, y);
+        // Lado Direito
+        ctx.moveTo(width/2 + 12, y);
+        ctx.lineTo(width/2, y);
+      }
+      ctx.stroke();
+
+      // Corpo plástico preto
+      ctx.beginPath();
+      ctx.rect(-width/2, -height/2, width, height);
+      ctx.fillStyle = '#111827';
+      ctx.fill();
+      ctx.stroke();
+
+      // Marcação do pino 1 (círculo) e chanfro no topo
+      ctx.beginPath();
+      ctx.arc(-width/2 + 8, startY, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#475569';
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.arc(0, -height/2, 6, 0, Math.PI, false);
+      ctx.stroke();
+
+      // Labels dos pinos (esquerda)
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '7px monospace';
+      ctx.textAlign = 'left';
+      const leftLabels = comp.terminals.slice(0, pinsPerSide);
+      leftLabels.forEach((t, i) => {
+        ctx.fillText(t.label || '', -width/2 + 4, startY + i * pinSpacing + 3);
+      });
+
+      // Labels dos pinos (direita)
+      ctx.textAlign = 'right';
+      const rightLabels = comp.terminals.slice(pinsPerSide, pinsPerSide * 2);
+      rightLabels.forEach((t, i) => {
+        // Direita vai de baixo pra cima no CI real, mas mapeamos assim no defaultTerminals
+        ctx.fillText(t.label || '', width/2 - 4, startY + (pinsPerSide - 1 - i) * pinSpacing + 3);
+      });
+
+      // Nome do CI no centro
+      ctx.save();
+      ctx.translate(0, 0);
+      ctx.rotate(-Math.PI / 2); // Texto na vertical
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      const ciName = comp.type === 'ic_555' ? 'NE555' : (comp.type === 'opamp_tl072' ? 'TL072' : 'TL074');
+      ctx.fillText(ciName, 0, 0);
+      ctx.restore();
+      
+      break;
+    }
+
     case 'logic_analyzer': {
       const channelRows = [
         { y: -40, label: 'D0' },
@@ -1297,64 +1868,87 @@ export function drawComponent(
       ctx.lineTo(-20, 20);
       ctx.stroke();
 
-      // Retângulo preenchido
+      // Retângulo bege do resistor (Estilo Proteus)
       ctx.beginPath();
       ctx.rect(-25, -20, 10, 40);
-      ctx.fillStyle = colors.bg;
+      ctx.fillStyle = '#e0ddc9'; // Bege
       ctx.fill();
       ctx.stroke();
 
-      // Botões de ajuste (setinhas vermelhas do Proteus)
-      ctx.fillStyle = '#dc2626'; // Vermelho
-      // Seta Cima (+)
+      // Botões de ajuste (círculos vermelhos escuros com setas vermelhas claras)
+      ctx.fillStyle = '#800000'; // Vermelho escuro
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
+      
+      // Botão Seta Cima
       ctx.beginPath();
-      ctx.arc(-20, -10, 3, 0, Math.PI * 2);
+      ctx.arc(6, -12, 6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#ffffff';
+      ctx.stroke();
+      
+      // Botão Seta Baixo
+      ctx.beginPath();
+      ctx.arc(6, 12, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = '#ff3333'; // Vermelho claro para a seta
       ctx.textAlign = 'center';
-      ctx.font = 'bold 6px sans-serif';
-      ctx.fillText('+', -20, -8);
-      // Seta Baixo (-)
-      ctx.fillStyle = '#dc2626';
-      ctx.beginPath();
-      ctx.arc(-20, 10, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText('-', -20, 12);
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 8px sans-serif';
+      ctx.fillText('↑', 6, -11);
+      ctx.fillText('↓', 6, 13);
 
-      ctx.fillStyle = colors.text;
+      // Restaura linha original para os fios
+      ctx.lineWidth = isSelected ? 2.5 : 2;
+      ctx.strokeStyle = isSelected ? colors.selected : colors.component;
 
-      // Cursor W (40, 0) para o meio do resistor
+      // Cursor Wiper para o centro do resistor
+      const setting = Number(comp.properties.setting?.value ?? 50);
+      const wiperY = -15 + (1 - (setting / 100)) * 30; // Mapeia 100%->-15, 0%->15
+      
       ctx.beginPath();
       ctx.moveTo(40, 0);
       ctx.lineTo(0, 0);
-      // Seta apontando para o resistor (Wiper)
-      const setting = Number(comp.properties.setting?.value ?? 50);
-      // Posiciona o wiper na tela proporcional ao setting
-      const wiperY = -15 + (1 - (setting / 100)) * 30; // setting 100% -> y = -15 (top), 0% -> y = 15 (bottom)
-      
       ctx.lineTo(0, wiperY);
       ctx.lineTo(-12, wiperY);
+      // Seta desenhada e preenchida estilo ARES
       ctx.moveTo(-18, wiperY);
       ctx.lineTo(-12, wiperY - 4);
       ctx.lineTo(-12, wiperY + 4);
-      ctx.lineTo(-18, wiperY);
+      ctx.closePath();
+      ctx.fillStyle = isSelected ? colors.selected : colors.component;
+      ctx.fill();
       ctx.stroke();
 
-      // Label do valor e percentual
-      const rVal = comp.properties.resistance?.value ?? 10000;
-      let labelText = `${rVal}Ω (${setting}%)`;
-      if (Number(rVal) >= 1e6) labelText = `${(Number(rVal) / 1e6).toFixed(1)}M (${setting}%)`;
-      else if (Number(rVal) >= 1e3) labelText = `${(Number(rVal) / 1e3).toFixed(1)}k (${setting}%)`;
+      // Porcentagem escrita dentro da caixa do resistor (90 graus)
+      ctx.save();
+      ctx.translate(-20, 0);
+      ctx.rotate(Math.PI / 2);
+      ctx.fillStyle = '#cc0000';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${setting}%`, 0, 0);
+      ctx.restore();
+
+      // Label do valor (e.g. 100k) e texto "Linear"
+      const rVal = comp.properties.resistance?.value ?? 100000;
+      let labelText = `${rVal}`;
+      if (Number(rVal) >= 1e6) labelText = `${(Number(rVal) / 1e6).toFixed(1)}M`;
+      else if (Number(rVal) >= 1e3) labelText = `${(Number(rVal) / 1e3).toFixed(0)}k`;
 
       ctx.save();
-      ctx.translate(0, 32);
+      ctx.translate(0, 0);
       if (rotation === 90 || rotation === 270) ctx.rotate(-Math.PI / 2);
       ctx.fillStyle = colors.text;
-      ctx.font = '9px font-mono';
-      ctx.textAlign = 'center';
-      ctx.fillText(labelText, 0, 0);
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(labelText, 16, -1);
+      ctx.font = '10px sans-serif';
+      ctx.fillText('Linear', 16, 15);
       ctx.restore();
+      
       break;
     }
 

@@ -90,13 +90,15 @@ export function getDefaultProperties(type: string): Record<string, ComponentProp
 
   switch (type) {
     case 'resistor':
+    case 'resistor_5w':
+    case 'resistor_smd':
       props.resistance = {
         name: 'resistance',
         label: 'Resistência',
         value: 1000,
         unit: 'Ω',
         type: 'number',
-        description: 'Oposição do componente ao fluxo de corrente'
+        description: 'Valor da resistência em Ohms'
       };
       break;
     case 'source_dc':
@@ -264,12 +266,17 @@ export function getDefaultProperties(type: string): Record<string, ComponentProp
       break;
     case 'transistor_bjt_npn':
     case 'transistor_bjt_pnp':
+    case 'transistor_2sc5200':
+    case 'transistor_2sa1943':
+    case 'transistor_tip41':
+    case 'transistor_tip42':
       props.beta = {
         name: 'beta',
-        label: 'Ganho (hFE)',
-        value: 100,
+        label: 'Ganho (β/hFE)',
+        value: (type === 'transistor_2sc5200' || type === 'transistor_2sa1943') ? 80 : (type === 'transistor_tip41' || type === 'transistor_tip42') ? 50 : 100,
+        unit: '',
         type: 'number',
-        description: 'Ganho de corrente DC do transistor (Beta/hFE)'
+        description: 'Ganho de corrente do transistor'
       };
       break;
     case 'switch':
@@ -314,6 +321,7 @@ export function getDefaultProperties(type: string): Record<string, ComponentProp
       };
       break;
     case 'pot':
+    case 'trimpot_multi':
       props.resistance = {
         name: 'resistance',
         label: 'Resistência Total',
@@ -414,6 +422,76 @@ export function getDefaultProperties(type: string): Record<string, ComponentProp
         description: 'Liga/desliga a injeção de alta tensão'
       };
       break;
+    case 'lamp':
+      props.nominalVoltage = {
+        name: 'nominalVoltage',
+        label: 'Tensão Nominal',
+        value: 12,
+        unit: 'V',
+        type: 'number',
+        description: 'Tensão nominal da lâmpada'
+      };
+      props.nominalResistance = {
+        name: 'nominalResistance',
+        label: 'Resistência a Frio',
+        value: 24,
+        unit: 'Ω',
+        type: 'number',
+        description: 'Resistência em Ohms'
+      };
+      break;
+    case 'speaker':
+      props.impedance = {
+        name: 'impedance',
+        label: 'Impedância',
+        value: 8,
+        unit: 'Ω',
+        type: 'number',
+        description: 'Impedância do Alto-falante'
+      };
+      break;
+    case 'seven_segment':
+      props.mode = {
+        name: 'mode',
+        label: 'Tipo',
+        value: 'cathode',
+        type: 'select',
+        options: ['cathode', 'anode'],
+        description: 'Catodo Comum ou Anodo Comum'
+      };
+      props.color = {
+        name: 'color',
+        label: 'Cor',
+        value: 'red',
+        type: 'select',
+        options: ['red', 'green', 'blue', 'yellow'],
+        description: 'Cor dos segmentos'
+      };
+      break;
+    case 'diode_bridge':
+      props.currentRating = {
+        name: 'currentRating',
+        label: 'Corrente Máx.',
+        value: 10,
+        unit: 'A',
+        type: 'select',
+        options: ['10', '25', '50'],
+        description: 'Corrente nominal da ponte retificadora'
+      };
+      break;
+    case 'ic_7442':
+    case 'adc_0808':
+    case 'audio_in':
+    case 'vcc_terminal':
+    case 'voltmeter':
+    case 'ammeter':
+    case 'ic_555':
+    case 'opamp_tl072':
+    case 'opamp_tl074':
+    case 'regulator_7805':
+    case 'arduino_nano':
+      // Sem propriedades editáveis complexas
+      break;
   }
 
   return props;
@@ -423,6 +501,10 @@ export function getDefaultProperties(type: string): Record<string, ComponentProp
 export function getDefaultTerminals(type: string): { id: string; relX: number; relY: number; label?: string }[] {
   if (type === 'junction') {
     return [{ id: 'j1', relX: 0, relY: 0, label: 'J' }];
+  }
+  
+  if (type === 'audio_in' || type === 'vcc_terminal') {
+    return [{ id: 'p', relX: 0, relY: 0, label: type === 'vcc_terminal' ? 'VCC' : 'In' }];
   }
   
   if (type === 'ground') {
@@ -453,6 +535,77 @@ export function getDefaultTerminals(type: string): { id: string; relX: number; r
     ];
   }
 
+  if (type === 'lamp' || type === 'speaker') {
+    return [
+      { id: 't1', relX: 0, relY: -2, label: 'T1' },
+      { id: 't2', relX: 0, relY: 2, label: 'T2' }
+    ];
+  }
+
+  if (type === 'ic_7442') {
+    return [
+      { id: 'a', relX: -4, relY: -1, label: 'A' },
+      { id: 'b', relX: -4, relY: 0, label: 'B' },
+      { id: 'c', relX: -4, relY: 1, label: 'C' },
+      { id: 'd', relX: -4, relY: 2, label: 'D' },
+      { id: 'out0', relX: 4, relY: -4, label: '0' },
+      { id: 'out1', relX: 4, relY: -3, label: '1' },
+      { id: 'out2', relX: 4, relY: -2, label: '2' },
+      { id: 'out3', relX: 4, relY: -1, label: '3' },
+      { id: 'out4', relX: 4, relY: 0, label: '4' },
+      { id: 'out5', relX: 4, relY: 1, label: '5' },
+      { id: 'out6', relX: 4, relY: 2, label: '6' },
+      { id: 'out7', relX: 4, relY: 3, label: '7' },
+      { id: 'out8', relX: 4, relY: 4, label: '8' },
+      { id: 'out9', relX: 4, relY: 5, label: '9' }
+    ];
+  }
+
+  if (type === 'seven_segment') {
+    return [
+      { id: 'a', relX: -3, relY: 3, label: 'a' },
+      { id: 'b', relX: -2, relY: 3, label: 'b' },
+      { id: 'c', relX: -1, relY: 3, label: 'c' },
+      { id: 'd', relX: 0, relY: 3, label: 'd' },
+      { id: 'e', relX: 1, relY: 3, label: 'e' },
+      { id: 'f', relX: 2, relY: 3, label: 'f' },
+      { id: 'g', relX: 3, relY: 3, label: 'g' },
+      { id: 'dp', relX: 4, relY: 3, label: 'dp' },
+      { id: 'com', relX: 0, relY: -4, label: 'COM' }
+    ];
+  }
+
+  if (type === 'adc_0808') {
+    return [
+      { id: 'in0', relX: -5, relY: -6, label: 'IN0' },
+      { id: 'in1', relX: -5, relY: -5, label: 'IN1' },
+      { id: 'in2', relX: -5, relY: -4, label: 'IN2' },
+      { id: 'in3', relX: -5, relY: -3, label: 'IN3' },
+      { id: 'in4', relX: -5, relY: -2, label: 'IN4' },
+      { id: 'in5', relX: -5, relY: -1, label: 'IN5' },
+      { id: 'in6', relX: -5, relY: 0, label: 'IN6' },
+      { id: 'in7', relX: -5, relY: 1, label: 'IN7' },
+      { id: 'adda', relX: -5, relY: 3, label: 'ADD A' },
+      { id: 'addb', relX: -5, relY: 4, label: 'ADD B' },
+      { id: 'addc', relX: -5, relY: 5, label: 'ADD C' },
+      { id: 'ale', relX: -5, relY: 6, label: 'ALE' },
+      { id: 'vrefp', relX: -5, relY: 8, label: 'VREF+' },
+      { id: 'vrefn', relX: -5, relY: 9, label: 'VREF-' },
+      { id: 'clock', relX: 5, relY: -6, label: 'CLOCK' },
+      { id: 'start', relX: 5, relY: -5, label: 'START' },
+      { id: 'eoc', relX: 5, relY: -3, label: 'EOC' },
+      { id: 'out1', relX: 5, relY: -1, label: 'OUT1' },
+      { id: 'out2', relX: 5, relY: 0, label: 'OUT2' },
+      { id: 'out3', relX: 5, relY: 1, label: 'OUT3' },
+      { id: 'out4', relX: 5, relY: 2, label: 'OUT4' },
+      { id: 'out5', relX: 5, relY: 3, label: 'OUT5' },
+      { id: 'out6', relX: 5, relY: 4, label: 'OUT6' },
+      { id: 'out7', relX: 5, relY: 5, label: 'OUT7' },
+      { id: 'out8', relX: 5, relY: 6, label: 'OUT8' },
+      { id: 'oe', relX: 5, relY: 8, label: 'OE' }
+    ];
+  }
+
   if (type === 'net_label') {
     return [{ id: 'net', relX: 0, relY: 0, label: 'NET' }];
   }
@@ -474,7 +627,7 @@ export function getDefaultTerminals(type: string): { id: string; relX: number; r
     ];
   }
 
-  if (type === 'pot') {
+  if (type === 'pot' || type === 'trimpot_multi') {
     return [
       { id: 'a', relX: -2, relY: -1, label: 'A' },
       { id: 'b', relX: -2, relY: 1, label: 'B' },
@@ -497,7 +650,7 @@ export function getDefaultTerminals(type: string): { id: string; relX: number; r
     ];
   }
 
-  if (type === 'transistor_bjt_npn' || type === 'transistor_bjt_pnp') {
+  if (type.startsWith('transistor_')) {
     return [
       { id: 'c', relX: 1, relY: -2, label: 'C' }, // Coletor no topo
       { id: 'b', relX: -2, relY: 0, label: 'B' }, // Base na esquerda
@@ -519,7 +672,80 @@ export function getDefaultTerminals(type: string): { id: string; relX: number; r
     return [{ id: 'p', relX: 0, relY: 0, label: 'Probe' }];
   }
 
-  // Resistor, LDR, capacitor, indutor, switch, motor_dc
+  if (type === 'ic_555') {
+    return [
+      { id: 'gnd', relX: -3, relY: 3, label: 'GND' },
+      { id: 'trig', relX: -3, relY: 1, label: 'TRIG' },
+      { id: 'out', relX: 3, relY: 1, label: 'OUT' },
+      { id: 'rst', relX: -3, relY: -1, label: 'RST' },
+      { id: 'ctrl', relX: -3, relY: -3, label: 'CTRL' },
+      { id: 'thr', relX: 3, relY: -1, label: 'THR' },
+      { id: 'dis', relX: 3, relY: -3, label: 'DIS' },
+      { id: 'vcc', relX: 3, relY: 3, label: 'VCC' }
+    ];
+  }
+
+  if (type === 'opamp_tl072') {
+    return [
+      { id: 'out1', relX: -3, relY: -3, label: '1OUT' },
+      { id: 'in1n', relX: -3, relY: -1, label: '1IN-' },
+      { id: 'in1p', relX: -3, relY: 1, label: '1IN+' },
+      { id: 'vccn', relX: -3, relY: 3, label: 'VCC-' },
+      { id: 'in2p', relX: 3, relY: 3, label: '2IN+' },
+      { id: 'in2n', relX: 3, relY: 1, label: '2IN-' },
+      { id: 'out2', relX: 3, relY: -1, label: '2OUT' },
+      { id: 'vccp', relX: 3, relY: -3, label: 'VCC+' }
+    ];
+  }
+
+  if (type === 'opamp_tl074') {
+    return [
+      { id: 'out1', relX: -3, relY: -6, label: '1OUT' },
+      { id: 'in1n', relX: -3, relY: -4, label: '1IN-' },
+      { id: 'in1p', relX: -3, relY: -2, label: '1IN+' },
+      { id: 'vccp', relX: -3, relY: 0, label: 'VCC+' },
+      { id: 'in2p', relX: -3, relY: 2, label: '2IN+' },
+      { id: 'in2n', relX: -3, relY: 4, label: '2IN-' },
+      { id: 'out2', relX: -3, relY: 6, label: '2OUT' },
+      { id: 'out3', relX: 3, relY: 6, label: '3OUT' },
+      { id: 'in3n', relX: 3, relY: 4, label: '3IN-' },
+      { id: 'in3p', relX: 3, relY: 2, label: '3IN+' },
+      { id: 'vccn', relX: 3, relY: 0, label: 'VCC-' },
+      { id: 'in4p', relX: 3, relY: -2, label: '4IN+' },
+      { id: 'in4n', relX: 3, relY: -4, label: '4IN-' },
+      { id: 'out4', relX: 3, relY: -6, label: '4OUT' }
+    ];
+  }
+
+  if (type === 'diode_bridge') {
+    return [
+      { id: 'ac1', relX: -2, relY: -2, label: '~' },
+      { id: 'pos', relX: 2, relY: -2, label: '+' },
+      { id: 'ac2', relX: 2, relY: 2, label: '~' },
+      { id: 'neg', relX: -2, relY: 2, label: '-' }
+    ];
+  }
+
+  if (type === 'regulator_7805') {
+    return [
+      { id: 'in', relX: -2, relY: 0, label: 'IN' },
+      { id: 'gnd', relX: 0, relY: 2, label: 'GND' },
+      { id: 'out', relX: 2, relY: 0, label: 'OUT' }
+    ];
+  }
+
+  if (type === 'arduino_nano') {
+    const leftPins = ['TX1', 'RX0', 'RST', 'GND', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'D10', 'D11', 'D12'];
+    const rightPins = ['VIN', 'GND', 'RST', '5V', 'A7', 'A6', 'A5', 'A4', 'A3', 'A2', 'A1', 'A0', 'REF', '3V3', 'D13'];
+    const pins = [];
+    for (let i = 0; i < 15; i++) {
+      pins.push({ id: `p${i+1}`, relX: -5, relY: i - 7, label: leftPins[i] });
+      pins.push({ id: `p${30-i}`, relX: 5, relY: i - 7, label: rightPins[i] });
+    }
+    return pins;
+  }
+
+  // Resistor, LDR, capacitor, indutor, switch, motor_dc, resistor_5w, resistor_smd
   return [
     { id: 't1', relX: -2, relY: 0, label: 'T1' },
     { id: 't2', relX: 2, relY: 0, label: 'T2' }
@@ -572,7 +798,27 @@ export function createCircuitComponent(
     logic_or: 'Porta OR',
     logic_not: 'Porta NOT',
     motor_dc: 'Motor DC',
-    relay: 'Relé'
+    relay: 'Relé',
+    lamp: 'Lâmpada',
+    speaker: 'Alto-falante',
+    audio_in: 'Entrada de Áudio',
+    ic_7442: 'CI 7442',
+    seven_segment: 'Display 7 Seg',
+    adc_0808: 'CI ADC0808',
+    vcc_terminal: 'VCC',
+    ic_555: '555 Timer',
+    opamp_tl072: 'TL072',
+    opamp_tl074: 'TL074',
+    transistor_2sc5200: '2SC5200 NPN',
+    transistor_2sa1943: '2SA1943 PNP',
+    transistor_tip41: 'TIP41 NPN',
+    transistor_tip42: 'TIP42 PNP',
+    resistor_5w: 'Resistor 5W',
+    resistor_smd: 'Resistor SMD',
+    diode_bridge: 'Ponte Retificadora',
+    regulator_7805: 'LM7805',
+    arduino_nano: 'Arduino Nano',
+    trimpot_multi: 'Trimpot Multivoltas'
   };
 
   const name = `${defaultNames[type] || 'Componente'} ${randomStr.toUpperCase()}`;

@@ -295,46 +295,82 @@ export default function Pcb3dViewer({
 
       // Renderização detalhada da carcaça do componente
       switch (comp.type) {
-        case 'resistor': {
-          // Corpo cilíndrico bege
-          const bodyGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.8, 16);
-          bodyGeo.rotateZ(Math.PI / 2);
-          const resistorMat = new THREE.MeshStandardMaterial({ color: 0xded0b6, roughness: 0.6 });
-          const body = new THREE.Mesh(bodyGeo, resistorMat);
-          body.position.y = 0.18;
-          body.castShadow = true;
-          group.add(body);
+        case 'resistor':
+        case 'resistor_5w':
+        case 'resistor_smd': {
+          if (comp.type === 'resistor_5w') {
+            // Bloco Cerâmico 5W
+            const bodyGeo = new THREE.BoxGeometry(0.8, 0.3, 0.3);
+            const resistorMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.8 }); // Branco Cerâmico
+            const body = new THREE.Mesh(bodyGeo, resistorMat);
+            body.position.y = 0.15;
+            body.castShadow = true;
+            group.add(body);
+            
+            // Fios grossos
+            const wireGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8);
+            wireGeo.rotateZ(Math.PI / 2);
+            const wiresMesh = new THREE.Mesh(wireGeo, leadMaterial);
+            wiresMesh.position.y = 0.15;
+            group.add(wiresMesh);
+          } else if (comp.type === 'resistor_smd') {
+            // Bloco preto pequeno
+            const bodyGeo = new THREE.BoxGeometry(0.3, 0.1, 0.15);
+            const resistorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.6 }); // Preto Escuro
+            const body = new THREE.Mesh(bodyGeo, resistorMat);
+            body.position.y = 0.05;
+            body.castShadow = true;
+            group.add(body);
+            
+            // Contatos prateados nas pontas
+            const contactGeo = new THREE.BoxGeometry(0.06, 0.11, 0.16);
+            const contactLeft = new THREE.Mesh(contactGeo, leadMaterial);
+            contactLeft.position.set(-0.15, 0.05, 0);
+            group.add(contactLeft);
+            const contactRight = new THREE.Mesh(contactGeo, leadMaterial);
+            contactRight.position.set(0.15, 0.05, 0);
+            group.add(contactRight);
+          } else {
+            // Resistor comum PTH (1/4W)
+            const bodyGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.8, 16);
+            bodyGeo.rotateZ(Math.PI / 2);
+            const resistorMat = new THREE.MeshStandardMaterial({ color: 0xded0b6, roughness: 0.6 });
+            const body = new THREE.Mesh(bodyGeo, resistorMat);
+            body.position.y = 0.18;
+            body.castShadow = true;
+            group.add(body);
 
-          // Fio conectando as pernas ao corpo
-          const wireGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.4, 8);
-          wireGeo.rotateZ(Math.PI / 2);
-          const wiresMesh = new THREE.Mesh(wireGeo, leadMaterial);
-          wiresMesh.position.y = 0.18;
-          group.add(wiresMesh);
+            // Fio conectando as pernas ao corpo
+            const wireGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.4, 8);
+            wireGeo.rotateZ(Math.PI / 2);
+            const wiresMesh = new THREE.Mesh(wireGeo, leadMaterial);
+            wiresMesh.position.y = 0.18;
+            group.add(wiresMesh);
 
-          // Listras coloridas do resistor (com base na resistência)
-          const stripColors = [0x8b5a2b, 0x000000, 0xff0000, 0xd4af37]; // Marrom, Preto, Vermelho, Dourado para 1kΩ
-          const valueStr = String(comp.properties.resistance?.value || '1k');
-          if (valueStr.includes('100') && !valueStr.includes('100k')) {
-            stripColors[2] = 0x964b00; // Marrom (100 ohms)
-          } else if (valueStr.includes('10k')) {
-            stripColors[2] = 0xffa500; // Laranja (10k ohms)
-          } else if (valueStr.includes('100k')) {
-            stripColors[2] = 0xffff00; // Amarelo (100k)
-          } else if (valueStr.includes('220')) {
-            stripColors[0] = 0xff0000; // Vermelho
-            stripColors[1] = 0xff0000; // Vermelho
-            stripColors[2] = 0x964b00; // Marrom
+            // Listras coloridas do resistor
+            const stripColors = [0x8b5a2b, 0x000000, 0xff0000, 0xd4af37]; // Marrom, Preto, Vermelho, Dourado para 1kΩ
+            const valueStr = String(comp.properties.resistance?.value || '1k');
+            if (valueStr.includes('100') && !valueStr.includes('100k')) {
+              stripColors[2] = 0x964b00; // Marrom
+            } else if (valueStr.includes('10k')) {
+              stripColors[2] = 0xffa500; // Laranja
+            } else if (valueStr.includes('100k')) {
+              stripColors[2] = 0xffff00; // Amarelo
+            } else if (valueStr.includes('220')) {
+              stripColors[0] = 0xff0000;
+              stripColors[1] = 0xff0000;
+              stripColors[2] = 0x964b00;
+            }
+
+            stripColors.forEach((color, idx) => {
+              const stripGeo = new THREE.CylinderGeometry(0.19, 0.19, 0.06, 16);
+              stripGeo.rotateZ(Math.PI / 2);
+              const stripMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
+              const strip = new THREE.Mesh(stripGeo, stripMat);
+              strip.position.set(-0.25 + idx * 0.18, 0.18, 0);
+              group.add(strip);
+            });
           }
-
-          stripColors.forEach((color, idx) => {
-            const stripGeo = new THREE.CylinderGeometry(0.19, 0.19, 0.06, 16);
-            stripGeo.rotateZ(Math.PI / 2);
-            const stripMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5 });
-            const strip = new THREE.Mesh(stripGeo, stripMat);
-            strip.position.set(-0.25 + idx * 0.18, 0.18, 0);
-            group.add(strip);
-          });
           break;
         }
 
@@ -364,9 +400,9 @@ export default function Pcb3dViewer({
 
         case 'capacitor_ceramic': {
           // Disco cerâmico marrom/laranja
-          const diskGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.1, 16);
+          const diskGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.1, 16);
           diskGeo.rotateX(Math.PI / 2);
-          const mat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.8 }); // Amber
+          const mat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.8 }); // Yellow/Amber
           const disk = new THREE.Mesh(diskGeo, mat);
           disk.position.y = 0.3;
           disk.castShadow = true;
@@ -547,46 +583,150 @@ export default function Pcb3dViewer({
           break;
         }
 
-        case 'pot': {
-          // Corpo principal (caixa azul)
-          const bodyGeo = new THREE.BoxGeometry(0.6, 0.5, 0.6);
-          const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.4 }); // Azul
+        case 'trimpot_multi': {
+          // Trimpot multivoltas longo azul
+          const bodyGeo = new THREE.BoxGeometry(0.8, 0.4, 0.4);
+          const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.4 }); // Azul
           const body = new THREE.Mesh(bodyGeo, bodyMat);
-          body.position.y = 0.25;
+          body.position.y = 0.2;
+          body.castShadow = true;
+          group.add(body);
+
+          // Parafuso dourado de ajuste no topo
+          const screwGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.05, 12);
+          const screwMat = new THREE.MeshStandardMaterial({ color: 0xfde047, metalness: 0.8, roughness: 0.2 }); // Dourado
+          const screw = new THREE.Mesh(screwGeo, screwMat);
+          screw.position.set(0.3, 0.42, 0); // Fica numa das pontas
+          group.add(screw);
+          break;
+        }
+
+        case 'pot': {
+          // Corpo principal (cilindro creme)
+          const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.5, 24);
+          bodyGeo.rotateZ(Math.PI / 2); // Deita o cilindro horizontalmente
+          const bodyMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.4 }); // Creme/bege
+          const body = new THREE.Mesh(bodyGeo, bodyMat);
+          body.position.set(0, 0.4, 0);
           body.castShadow = true;
           group.add(body);
 
           // Eixo metálico
-          const shaftGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 12);
+          const shaftGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.4, 16);
+          shaftGeo.rotateZ(Math.PI / 2);
           const shaft = new THREE.Mesh(shaftGeo, leadMaterial);
-          shaft.position.y = 0.6;
+          shaft.position.set(0.6, 0.4, 0);
           shaft.castShadow = true;
           group.add(shaft);
 
           // Knob de controle (plástico cinza/preto)
-          const knobGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.15, 12);
+          const knobGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.15, 24);
+          knobGeo.rotateZ(Math.PI / 2);
           const knobMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.6 });
           const knob = new THREE.Mesh(knobGeo, knobMat);
-          knob.position.y = 0.75;
+          knob.position.set(0.75, 0.4, 0);
           
           const setting = Number(comp.properties.setting?.value ?? 50);
-          knob.rotation.y = (setting / 100) * Math.PI * 1.5 - (Math.PI * 0.75); // Rotaciona 270 graus proporcionalmente
+          knob.rotation.x = (setting / 100) * Math.PI * 1.5 - (Math.PI * 0.75); // Rotaciona 270 graus proporcionalmente
           group.add(knob);
 
           // Indicador visual no knob
-          const ptrGeo = new THREE.BoxGeometry(0.03, 0.16, 0.08);
+          const ptrGeo = new THREE.BoxGeometry(0.16, 0.04, 0.16);
           const ptrMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
           const ptr = new THREE.Mesh(ptrGeo, ptrMat);
-          ptr.position.set(0, 0.08, -0.08);
+          ptr.position.set(0, 0.1, 0);
           knob.add(ptr);
           break;
         }
 
+        case 'regulator_7805': {
+          // TO-220 Package em pé
+          const bodyGeo = new THREE.BoxGeometry(0.6, 0.6, 0.2);
+          const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
+          const body = new THREE.Mesh(bodyGeo, bodyMat);
+          body.position.set(0, 0.6, 0);
+          body.castShadow = true;
+          group.add(body);
+
+          // Tab Metálico
+          const tabGeo = new THREE.BoxGeometry(0.6, 0.4, 0.05);
+          const tab = new THREE.Mesh(tabGeo, leadMaterial);
+          tab.position.set(0, 1.1, -0.075);
+          tab.castShadow = true;
+          group.add(tab);
+          
+          // Furo no tab (usando um cilindro preto simples)
+          const holeGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.06, 12);
+          holeGeo.rotateX(Math.PI/2);
+          const holeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+          const hole = new THREE.Mesh(holeGeo, holeMat);
+          hole.position.set(0, 1.1, -0.075);
+          group.add(hole);
+          break;
+        }
+
+        case 'arduino_nano': {
+          // Placa do Arduino Nano (4.3cm x 1.8cm, convertido para unidades do 3D: ~3.0 x 1.2)
+          const boardGeo = new THREE.BoxGeometry(3.0, 0.1, 1.2);
+          const boardMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.6 }); // Azul
+          const board = new THREE.Mesh(boardGeo, boardMat);
+          board.position.y = 0.3;
+          board.castShadow = true;
+          group.add(board);
+
+          // CI ATMega328 (QFP ou parecido)
+          const mcuGeo = new THREE.BoxGeometry(0.6, 0.05, 0.6);
+          const mcuMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+          const mcu = new THREE.Mesh(mcuGeo, mcuMat);
+          mcu.position.set(0.3, 0.375, 0);
+          mcu.rotation.y = Math.PI / 4;
+          group.add(mcu);
+
+          // Conector USB Mini (Prata)
+          const usbGeo = new THREE.BoxGeometry(0.5, 0.2, 0.4);
+          const usb = new THREE.Mesh(usbGeo, leadMaterial);
+          usb.position.set(-1.25, 0.45, 0);
+          group.add(usb);
+
+          // Pinos Header (2 fileiras)
+          const pinColor = leadMaterial;
+          for (let i = 0; i < 15; i++) {
+            const xPos = -1.4 + i * 0.2;
+            
+            // Fileira superior
+            const pin1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), pinColor);
+            pin1.position.set(xPos, 0.15, -0.5);
+            group.add(pin1);
+
+            // Fileira inferior
+            const pin2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.05), pinColor);
+            pin2.position.set(xPos, 0.15, 0.5);
+            group.add(pin2);
+          }
+          break;
+        }
+
+        case 'ic_7442':
+        case 'adc_0808':
+        case 'ic_555':
+        case 'opamp_tl072':
+        case 'opamp_tl074':
         case 'logic_and':
         case 'logic_or':
         case 'logic_not': {
+          let numPins = 14;
+          if (comp.type === 'logic_and' || comp.type === 'logic_or' || comp.type === 'logic_not') numPins = 14;
+          if (comp.type === 'ic_7442') numPins = 16;
+          if (comp.type === 'adc_0808') numPins = 28;
+          if (comp.type === 'ic_555' || comp.type === 'opamp_tl072') numPins = 8;
+          if (comp.type === 'opamp_tl074') numPins = 14;
+
+          const pinRows = numPins / 2;
+          const pitch = 0.2;
+          const length = pinRows * pitch + 0.1;
+
           // Corpo do CI (preto fosco)
-          const icGeo = new THREE.BoxGeometry(1.2, 0.28, 0.5);
+          const icGeo = new THREE.BoxGeometry(length, 0.28, 0.5);
           const icMat = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.7 });
           const ic = new THREE.Mesh(icGeo, icMat);
           ic.position.y = 0.24;
@@ -596,7 +736,7 @@ export default function Pcb3dViewer({
           // Chanfro / Meia lua indicador do pino 1
           const notchGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.3, 8, 1, false, 0, Math.PI);
           const notch = new THREE.Mesh(notchGeo, icMat);
-          notch.position.set(-0.6, 0.24, 0);
+          notch.position.set(-length/2, 0.24, 0);
           notch.rotation.z = Math.PI / 2;
           group.add(notch);
 

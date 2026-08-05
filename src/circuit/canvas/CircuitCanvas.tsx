@@ -1908,7 +1908,7 @@ export default function CircuitCanvas() {
             left: Math.max(4, adjustedX),
             zIndex: 99999
           }}
-          className="w-44 py-1.5 rounded-xl shadow-2xl backdrop-blur-md border border-slate-200/50 dark:border-slate-700/50 text-xs flex flex-col gap-0.5 bg-white/90 dark:bg-slate-900/95 text-slate-800 dark:text-slate-100"
+          className="w-56 py-1 shadow-md border border-gray-400 bg-[#f0f0f0] text-black font-sans text-[11px] flex flex-col"
         >
           {contextMenu.componentId ? (
             isWireId(contextMenu.componentId) ? (
@@ -1939,113 +1939,94 @@ export default function CircuitCanvas() {
               <>
                 <button
                   onClick={() => {
+                    setContextMenu(null);
+                  }}
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Move className="w-4 h-4 text-gray-700 group-hover:text-white" />
+                    <span>Drag Object</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
                     setPropertiesModalCompId(contextMenu.componentId);
                     setContextMenu(null);
                   }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
                 >
-                  <Sliders className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Editar Propriedades</span>
+                  <div className="flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-gray-700 group-hover:text-white" />
+                    <span>Edit Properties</span>
+                  </div>
+                  <span className="text-gray-500 group-hover:text-gray-200">Ctrl+E</span>
                 </button>
-                <hr className="my-0.5 border-slate-200/50 dark:border-slate-700/50" />
+                <button
+                  onClick={() => handleRemoveAction(contextMenu.componentId)}
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-red-600 group-hover:text-white" />
+                    <span>Delete Object</span>
+                  </div>
+                </button>
+
+                <hr className="my-1 border-gray-300" />
+
                 <button
                   onClick={() => handleRotateAction(contextMenu.componentId, 90)}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
                 >
-                  <RotateCw className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Girar horário (90°)</span>
+                  <div className="flex items-center gap-2">
+                    <RotateCw className="w-4 h-4 text-blue-700 group-hover:text-white" />
+                    <span>Rotate Clockwise</span>
+                  </div>
+                  <span className="text-gray-500 group-hover:text-gray-200">Num--</span>
                 </button>
                 <button
                   onClick={() => handleRotateAction(contextMenu.componentId, -90)}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
                 >
-                  <RotateCw className="w-3.5 h-3.5 text-indigo-500 -scale-x-100" />
-                  <span>Girar anti-horário</span>
+                  <div className="flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4 text-blue-700 group-hover:text-white" />
+                    <span>Rotate Anti-Clockwise</span>
+                  </div>
+                  <span className="text-gray-500 group-hover:text-gray-200">Num-+</span>
                 </button>
                 <button
                   onClick={() => handleRotateAction(contextMenu.componentId, 180)}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
                 >
-                  <RotateCw className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Girar 180°</span>
+                  <div className="flex items-center gap-2">
+                    <RotateCw className="w-4 h-4 text-blue-700 group-hover:text-white -scale-y-100" />
+                    <span>Rotate 180 degrees</span>
+                  </div>
                 </button>
-                <hr className="my-0.5 border-slate-200/50 dark:border-slate-700/50" />
-                <button
-                  onClick={() => handleRotateLabelAction(contextMenu.componentId, 90)}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
-                >
-                  <RotateCw className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Girar nome horário (90°)</span>
-                </button>
-                <button
-                  onClick={() => handleRotateLabelAction(contextMenu.componentId, -90)}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
-                >
-                  <RotateCw className="w-3.5 h-3.5 text-emerald-500 -scale-x-100" />
-                  <span>Girar nome anti-horário</span>
-                </button>
-                <button
-                  onClick={() => handleRotateLabelAction(contextMenu.componentId, 180)}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
-                >
-                  <RotateCw className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Girar nome 180°</span>
-                </button>
+
                 <button
                   onClick={() => {
                     toggleComponentMirrorX(contextMenu.componentId);
                     setContextMenu(null);
                   }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
                 >
-                  <Layers className="w-3.5 h-3.5 text-cyan-500 -scale-x-100" />
-                  <span>Espelhar X (Mirror X)</span>
+                  <div className="flex items-center gap-2">
+                    <ArrowLeftRight className="w-4 h-4 text-blue-700 group-hover:text-white" />
+                    <span>X-Mirror</span>
+                  </div>
+                  <span className="text-gray-500 group-hover:text-gray-200">Ctrl+M</span>
                 </button>
                 <button
                   onClick={() => {
                     toggleComponentMirrorY(contextMenu.componentId);
                     setContextMenu(null);
                   }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
+                  className="w-full px-4 py-1 text-left hover:bg-[#3399ff] hover:text-white flex items-center justify-between transition-none cursor-pointer"
                 >
-                  <Layers className="w-3.5 h-3.5 text-sky-500 -scale-y-100" />
-                  <span>Espelhar Y (Mirror Y)</span>
-                </button>
-                <button
-                  onClick={() => {
-                    if (isContextComponentInMultiSelection(contextMenu.componentId)) {
-                      copyActiveSelection();
-                      setContextMenu(null);
-                    } else {
-                      handleCopyAction(contextMenu.componentId);
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
-                >
-                  <Copy className="w-3.5 h-3.5 text-blue-500" />
-                  <span>Copiar</span>
-                </button>
-                <button
-                  onClick={() => {
-                    if (isContextComponentInMultiSelection(contextMenu.componentId)) {
-                      duplicateActiveSelection();
-                      setContextMenu(null);
-                    } else {
-                      handleDuplicateAction(contextMenu.componentId);
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5 transition-colors cursor-pointer"
-                >
-                  <Layers className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Duplicar</span>
-                </button>
-                <hr className="my-1 border-slate-200/50 dark:border-slate-700/50" />
-                <button
-                  onClick={() => handleRemoveAction(contextMenu.componentId)}
-                  className="w-full px-3 py-2 text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2.5 transition-colors cursor-pointer font-medium"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Excluir</span>
+                  <div className="flex items-center gap-2">
+                    <ArrowUpDown className="w-4 h-4 text-blue-700 group-hover:text-white" />
+                    <span>Y-Mirror</span>
+                  </div>
                 </button>
               </>
             )

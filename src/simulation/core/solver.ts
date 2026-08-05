@@ -80,6 +80,7 @@ export interface SolverState {
   probePeaks?: Record<string, number>;
   probeDisplayValues?: Record<string, number>;
   probeDisplayTimes?: Record<string, number>;
+  ic555States?: Record<string, boolean>;
 }
 
 interface ExtraRestriction {
@@ -355,18 +356,18 @@ export function runSimulationStep(
   const bjts: { compId: string; nC: number; nB: number; nE: number; type: 'npn' | 'pnp'; beta: number }[] = [];
 
   components.forEach(comp => {
-    if (comp.type === 'source_dc' || comp.type === 'bench_supply') {
-      const v = Number(comp.properties.voltage?.value ?? 5);
+    if (comp.type === 'source_dc' || comp.type === 'bench_supply' || comp.type === 'vcc_terminal') {
+      const v = comp.type === 'vcc_terminal' ? 5 : Number(comp.properties.voltage?.value ?? 5);
       voltageSources.push({
         compId: comp.id,
         nodePos: terminalToNode[getTerminalKey(comp.id, 'p')],
-        nodeNeg: terminalToNode[getTerminalKey(comp.id, 'n')],
+        nodeNeg: comp.type === 'vcc_terminal' ? 0 : terminalToNode[getTerminalKey(comp.id, 'n')],
         voltage: v,
         type: comp.type === 'bench_supply' ? 'bench' : 'dc'
       });
-    } else if (comp.type === 'source_ac') {
-      const amplitude = Number(comp.properties.amplitude?.value ?? 5);
-      const freq = Number(comp.properties.frequency?.value ?? 60);
+    } else if (comp.type === 'source_ac' || comp.type === 'audio_in') {
+      const amplitude = comp.type === 'audio_in' ? 1 : Number(comp.properties.amplitude?.value ?? 5);
+      const freq = comp.type === 'audio_in' ? 440 : Number(comp.properties.frequency?.value ?? 60);
       const phase = Number(comp.properties.phase?.value ?? 0) * Math.PI / 180;
       const offset = Number(comp.properties.offset?.value ?? 0);
       
@@ -375,7 +376,7 @@ export function runSimulationStep(
       voltageSources.push({
         compId: comp.id,
         nodePos: terminalToNode[getTerminalKey(comp.id, 'p')],
-        nodeNeg: terminalToNode[getTerminalKey(comp.id, 'n')],
+        nodeNeg: comp.type === 'audio_in' ? 0 : terminalToNode[getTerminalKey(comp.id, 'n')],
         voltage: vVal,
         type: 'ac'
       });
@@ -494,12 +495,40 @@ export function runSimulationStep(
         ? Math.max(Number(comp.properties.zenerVoltage?.value ?? 5.1), 0.1)
         : undefined;
       diodes.push({ compId: comp.id, nodeAnode: nAnode, nodeCathode: nCathode, type: comp.type as any, vOn, zenerVoltage });
-    } else if (comp.type === 'transistor_bjt_npn' || comp.type === 'transistor_bjt_pnp') {
+    } else if (comp.type === 'diode_bridge') {
+      const nAc1 = terminalToNode[getTerminalKey(comp.id, 'ac1')];
+      const nAc2 = terminalToNode[getTerminalKey(comp.id, 'ac2')];
+      const nPos = terminalToNode[getTerminalKey(comp.id, 'pos')];
+      const nNeg = terminalToNode[getTerminalKey(comp.id, 'neg')];
+      // A bridge consists of 4 diodes
+      // D1: AC1 -> POS
+      // D2: NEG -> AC1
+      // D3: AC2 -> POS
+      // D4: NEG -> AC2
+      diodes.push({ compId: `${comp.id}_d1`, nodeAnode: nAc1, nodeCathode: nPos, type: 'diodo', vOn: 0.7 });
+      diodes.push({ compId: `${comp.id}_d2`, nodeAnode: nNeg, nodeCathode: nAc1, type: 'diodo', vOn: 0.7 });
+      diodes.push({ compId: `${comp.id}_d3`, nodeAnode: nAc2, nodeCathode: nPos, type: 'diodo', vOn: 0.7 });
+      diodes.push({ compId: `${comp.id}_d4`, nodeAnode: nNeg, nodeCathode: nAc2, type: 'diodo', vOn: 0.7 });
+    } else if (comp.type === 'seven_segment') {
+      const isCathode = (comp.properties.mode?.value ?? 'cathode') === 'cathode';
+      const nCom = terminalToNode[getTerminalKey(comp.id, 'com')];
+      const segments = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'dp'];
+      
+      segments.forEach(seg => {
+        const nSeg = terminalToNode[getTerminalKey(comp.id, seg)];
+        if (isCathode) {
+          diodes.push({ compId: `${comp.id}_${seg}`, nodeAnode: nSeg, nodeCathode: nCom, type: 'led', vOn: 1.8 });
+        } else {
+          diodes.push({ compId: `${comp.id}_${seg}`, nodeAnode: nCom, nodeCathode: nSeg, type: 'led', vOn: 1.8 });
+        }
+      });
+    } else if (comp.type.startsWith('transistor_')) {
       const nC = terminalToNode[getTerminalKey(comp.id, 'c')];
       const nB = terminalToNode[getTerminalKey(comp.id, 'b')];
       const nE = terminalToNode[getTerminalKey(comp.id, 'e')];
       const beta = Number(comp.properties.beta?.value ?? 100);
-      bjts.push({ compId: comp.id, nC, nB, nE, type: comp.type === 'transistor_bjt_npn' ? 'npn' : 'pnp', beta });
+      const isNpn = comp.type.includes('npn') || comp.type === 'transistor_2sc5200' || comp.type === 'transistor_tip41';
+      bjts.push({ compId: comp.id, nC, nB, nE, type: isNpn ? 'npn' : 'pnp', beta });
     } else if (comp.type === 'logic_and' || comp.type === 'logic_or' || comp.type === 'logic_not') {
       const getTermNode = (tId: string) => terminalToNode[getTerminalKey(comp.id, tId)];
       const getVolt = (nodeIdx: number) => {
@@ -528,6 +557,188 @@ export function runSimulationStep(
         voltage: outVal,
         type: 'logic'
       });
+    } else if (comp.type === 'ic_7442') {
+      const getTermNode = (tId: string) => terminalToNode[getTerminalKey(comp.id, tId)];
+      const getVolt = (nodeIdx: number) => {
+        if (nodeIdx === undefined || nodeIdx <= 0) return 0;
+        return state.nodeVoltages[nodeIdx] ?? 0;
+      };
+      
+      const vA = getVolt(getTermNode('a')) > 2.5 ? 1 : 0;
+      const vB = getVolt(getTermNode('b')) > 2.5 ? 1 : 0;
+      const vC = getVolt(getTermNode('c')) > 2.5 ? 1 : 0;
+      const vD = getVolt(getTermNode('d')) > 2.5 ? 1 : 0;
+      
+      const val = vA + (vB << 1) + (vC << 2) + (vD << 3);
+      
+      for (let i = 0; i <= 9; i++) {
+        const outPin = `out${i}`;
+        // Saídas são ativas em BAIXO (0V). Inativas em ALTO (5V).
+        const outVolt = val === i ? 0 : 5;
+        
+        voltageSources.push({
+          compId: `${comp.id}_${outPin}`,
+          nodePos: getTermNode(outPin),
+          nodeNeg: 0,
+          voltage: outVolt,
+          type: 'logic_out'
+        });
+      }
+    } else if (comp.type === 'adc_0808') {
+      const getTermNode = (tId: string) => terminalToNode[getTerminalKey(comp.id, tId)];
+      const getVolt = (nodeIdx: number) => {
+        if (nodeIdx === undefined || nodeIdx <= 0) return 0;
+        return state.nodeVoltages[nodeIdx] ?? 0;
+      };
+      
+      // Simples lógica para o ADC: Lê endereço e seta as saídas com o valor digital
+      const addA = getVolt(getTermNode('adda')) > 2.5 ? 1 : 0;
+      const addB = getVolt(getTermNode('addb')) > 2.5 ? 1 : 0;
+      const addC = getVolt(getTermNode('addc')) > 2.5 ? 1 : 0;
+      
+      const channel = addA + (addB << 1) + (addC << 2);
+      
+      const vIn = getVolt(getTermNode(`in${channel}`));
+      const vRefP = getVolt(getTermNode('vrefp')) || 5;
+      const vRefN = getVolt(getTermNode('vrefn')) || 0;
+      const scale = vRefP - vRefN;
+      
+      let adcVal = 0;
+      if (scale > 0) {
+        adcVal = Math.floor(Math.max(0, Math.min(255, ((vIn - vRefN) / scale) * 255)));
+      }
+      
+      // Define a saída se Output Enable = HIGH (assumindo EOC sempre dispara na simulação contínua)
+      const oe = getVolt(getTermNode('oe')) > 2.5 ? 1 : 0;
+      voltageSources.push({
+        compId: `${comp.id}_eoc`,
+        nodePos: getTermNode('eoc'),
+        nodeNeg: 0,
+        voltage: 5, // assumimos conversão imediata
+        type: 'logic_out'
+      });
+      
+      for (let i = 1; i <= 8; i++) {
+        const bit = (adcVal >> (8 - i)) & 1; // OUT1 é MSB no ADC0808 (Pino 17 = 2^-1)
+        voltageSources.push({
+          compId: `${comp.id}_out${i}`,
+          nodePos: getTermNode(`out${i}`),
+          nodeNeg: 0,
+          voltage: (oe && bit) ? 5 : 0, // se OE=0, fica 0V
+          type: 'logic_out'
+        });
+      }
+    } else if (comp.type === 'regulator_7805') {
+      const getTermNode = (tId: string) => terminalToNode[getTerminalKey(comp.id, tId)];
+      const getVolt = (nodeIdx: number) => {
+        if (nodeIdx === undefined || nodeIdx <= 0) return 0;
+        return state.nodeVoltages[nodeIdx] ?? 0;
+      };
+      
+      const vIn = getVolt(getTermNode('in'));
+      const vGnd = getVolt(getTermNode('gnd'));
+      
+      // Se a entrada é maior que 6.5V em relação ao terra, a saída é 5V.
+      // Caso contrário, a saída acompanha a entrada com uma queda de tensão de ~1.5V.
+      let vOut = 0;
+      if (vIn - vGnd >= 6.5) {
+        vOut = 5.0;
+      } else if (vIn - vGnd > 1.5) {
+        vOut = (vIn - vGnd) - 1.5;
+      }
+      
+      voltageSources.push({
+        compId: `${comp.id}_out`,
+        nodePos: getTermNode('out'),
+        nodeNeg: getTermNode('gnd'), // A saída é 5V acima do GND do regulador
+        voltage: vOut,
+        type: 'vcvs' // Modelado estaticamente como uma fonte dependente de tensão para o MNA base
+      });
+    } else if (comp.type === 'ic_555') {
+      const getTermNode = (tId: string) => terminalToNode[getTerminalKey(comp.id, tId)];
+      const getVolt = (nodeIdx: number) => {
+        if (nodeIdx === undefined || nodeIdx <= 0) return 0;
+        return state.nodeVoltages[nodeIdx] ?? 0;
+      };
+
+      const vVcc = getVolt(getTermNode('vcc'));
+      const vGnd = getVolt(getTermNode('gnd'));
+      const vTrig = getVolt(getTermNode('trig'));
+      const vThr = getVolt(getTermNode('thr'));
+      const vRst = getVolt(getTermNode('rst'));
+      const vCtrl = getVolt(getTermNode('ctrl'));
+
+      // Thresholds: CTRL pin can override 2/3 VCC. If unconnected, it is normally 2/3 VCC.
+      // But we just read its voltage. If it's floating, getVolt returns 0, so we use internal dividers.
+      // In a real 555, there's a 3x 5k divider. Let's assume VCtrl = (2/3)Vcc if no external voltage.
+      const ctrlVoltage = vCtrl > 0.1 ? vCtrl : vGnd + (vVcc - vGnd) * 2 / 3;
+      const trigThreshold = vGnd + (ctrlVoltage - vGnd) / 2;
+
+      let flipFlop = state.ic555States?.[comp.id] ?? false;
+
+      // Se Reset < 0.7V, força RST
+      if (vRst - vGnd < 0.7) {
+        flipFlop = false;
+      } else {
+        if (vTrig < trigThreshold) {
+          flipFlop = true; // Set
+        } else if (vThr > ctrlVoltage) {
+          flipFlop = false; // Reset
+        }
+      }
+
+      // OUT voltage
+      const outVoltage = flipFlop ? vVcc - 1.5 : vGnd + 0.1;
+
+      voltageSources.push({
+        compId: comp.id,
+        nodePos: getTermNode('out'),
+        nodeNeg: getTermNode('gnd'),
+        voltage: outVoltage - vGnd,
+        type: 'logic_out'
+      });
+
+      // Transistor de descarga (DIS) - satura para o GND se flipFlop == false (Q barra = 1)
+      if (!flipFlop) {
+        const nDis = getTermNode('dis');
+        const nGnd = getTermNode('gnd');
+        switches.push({ compId: comp.id + '_dis', node1: nDis, node2: nGnd, isOpen: false });
+      }
+
+      // Salva estado para próxima iteração (faremos isso mais abaixo, mas para agora salva no state)
+      if (!state.ic555States) state.ic555States = {};
+      state.ic555States[comp.id] = flipFlop;
+    } else if (comp.type === 'opamp_tl072' || comp.type === 'opamp_tl074') {
+      const getTermNode = (tId: string) => terminalToNode[getTerminalKey(comp.id, tId)];
+      const getVolt = (nodeIdx: number) => {
+        if (nodeIdx === undefined || nodeIdx <= 0) return 0;
+        return state.nodeVoltages[nodeIdx] ?? 0;
+      };
+
+      const vVccP = getVolt(getTermNode('vccp'));
+      const vVccN = getVolt(getTermNode('vccn'));
+
+      const numAmps = comp.type === 'opamp_tl072' ? 2 : 4;
+      for (let i = 1; i <= numAmps; i++) {
+        const vp = getVolt(getTermNode(`in${i}p`));
+        const vn = getVolt(getTermNode(`in${i}n`));
+        // Modelo simples: Ganho muito alto (1e5), saturado nas alimentações
+        const gain = 1e5;
+        let vOut = (vp - vn) * gain;
+        // Saturação (TL072 não é rail-to-rail, perde ~1.5V)
+        const maxV = vVccP - 1.5;
+        const minV = vVccN + 1.5;
+        if (vOut > maxV) vOut = maxV;
+        if (vOut < minV) vOut = minV;
+
+        voltageSources.push({
+          compId: `${comp.id}_out${i}`,
+          nodePos: getTermNode(`out${i}`),
+          nodeNeg: 0,
+          voltage: vOut,
+          type: 'vcvs'
+        });
+      }
     }
   });
 
@@ -611,10 +822,14 @@ export function runSimulationStep(
     components.forEach(comp => {
       const getTermNode = (tId: string) => terminalToNode[getTerminalKey(comp.id, tId)];
 
-      if (comp.type === 'resistor' || comp.type === 'ldr' || comp.type === 'motor_dc') {
+      if (comp.type === 'resistor' || comp.type === 'ldr' || comp.type === 'motor_dc' || comp.type === 'lamp' || comp.type === 'speaker') {
         let r: number;
         if (comp.type === 'resistor') {
           r = Math.max(Number(comp.properties.resistance?.value ?? 1000), 0.01);
+        } else if (comp.type === 'lamp') {
+          r = Math.max(Number(comp.properties.nominalResistance?.value ?? 24), 0.01);
+        } else if (comp.type === 'speaker') {
+          r = Math.max(Number(comp.properties.impedance?.value ?? 8), 0.01);
         } else if (comp.type === 'motor_dc') {
           r = Math.max(Number(comp.properties.resistance?.value ?? 10), 0.01);
         } else {
@@ -1290,11 +1505,19 @@ export function runSimulationStep(
         isBurned = true;
         burnMessage = 'Corrente excessiva!';
       }
-    } else if (comp.type === 'resistor' || comp.type === 'pot') {
+    } else if (comp.type === 'resistor' || comp.type === 'pot' || comp.type === 'resistor_5w' || comp.type === 'resistor_smd' || comp.type === 'trimpot_multi') {
       const p = Math.abs(voltage * current);
-      if (p > 1.0) { // Mais de 1 Watt num resistor comum
+      const limit = comp.type === 'resistor_5w' ? 5.0 : (comp.type === 'resistor_smd' ? 0.25 : 1.0);
+      if (p > limit) {
         isBurned = true;
         burnMessage = 'Sobrecarga de potência!';
+      }
+    } else if (comp.type === 'diode_bridge') {
+      // Limit depends on current rating
+      const rating = Number(comp.properties.currentRating?.value ?? 10);
+      if (Math.abs(current) > rating) {
+        isBurned = true;
+        burnMessage = 'Sobrecarga de corrente!';
       }
     } else if (comp.type === 'source_dc' || comp.type === 'bench_supply') {
       const limit = comp.type === 'bench_supply' ? Number(comp.properties.currentLimit?.value ?? 1) : 5.0;
@@ -1306,21 +1529,31 @@ export function runSimulationStep(
 
     const acPeak = comp.type === 'probe_ac' ? (nextProbePeaks[comp.id] ?? Math.abs(voltage)) : undefined;
 
+    let customState: any = undefined;
+    if (comp.type === 'probe_ac') {
+      customState = {
+        vPeak: acPeak,
+        vRms: (acPeak ?? 0) / Math.SQRT2,
+        displayVoltage: nextProbeDisplayValues[comp.id] ?? acPeak ?? Math.abs(voltage)
+      };
+    } else if (comp.type === 'probe_dc') {
+      customState = { displayVoltage: nextProbeDisplayValues[comp.id] ?? voltage };
+    } else if (comp.type === 'lamp') {
+      // Consider lit if power > 0.1W or voltage drop is sufficient
+      customState = { isLit: Math.abs(voltage) > 2 };
+    } else if (comp.type === 'seven_segment') {
+      const segments = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'dp'];
+      const litSegments = segments.filter(seg => diodeMode[`${comp.id}_${seg}`] === 'forward');
+      customState = { litSegments };
+    }
+
     componentStates[comp.id] = {
       voltage,
       current,
       power: Math.abs(voltage * current),
       isBurned,
       burnMessage,
-      custom: comp.type === 'probe_ac'
-        ? {
-            vPeak: acPeak,
-            vRms: (acPeak ?? 0) / Math.SQRT2,
-            displayVoltage: nextProbeDisplayValues[comp.id] ?? acPeak ?? Math.abs(voltage)
-          }
-        : comp.type === 'probe_dc'
-          ? { displayVoltage: nextProbeDisplayValues[comp.id] ?? voltage }
-          : undefined
+      custom: customState
     };
   });
 

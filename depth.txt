@@ -1,0 +1,90 @@
+141 depth: 1 if (gridX >= Math.min(sx1, sx2) && gridX <= Math.max(sx1, sx2) &&
+149 depth: 1 if (gridX >= Math.min(sx1, sx2) && gridX <= Math.max(sx1, sx2) &&
+154 depth: 1 if (gridX >= Math.min(x1, x2) && gridX <= Math.max(x1, x2) &&
+162 depth: 1 export function runSimulationStep(
+193 depth: 1 components.forEach(comp => {
+194 depth: 2 comp.terminals.forEach(term => {
+199 depth: 1 });
+203 depth: 1 components.forEach(comp => {
+217 depth: 1 Object.values(coordsMap).forEach(termKeys => {
+224 depth: 1 wires.forEach(wire => {
+231 depth: 1 components.forEach(comp => {
+249 depth: 2 components.forEach(other => {
+251 depth: 3 other.terminals.forEach(otherTerm => {
+257 depth: 2 });
+258 depth: 1 });
+266 depth: 1 components.forEach(comp => {
+268 depth: 2 comp.terminals.forEach(term => {
+270 depth: 1 });
+278 depth: 1 const preferredReferenceTypes = new Set([
+306 depth: 1 components.forEach(comp => {
+307 depth: 2 comp.terminals.forEach(term => {
+319 depth: 1 });
+324 depth: 1 components.forEach(comp => {
+325 depth: 2 comp.terminals.forEach(term => {
+329 depth: 1 });
+358 depth: 1 components.forEach(comp => {
+361 depth: 2 voltageSources.push({
+367 depth: 1 });
+376 depth: 2 voltageSources.push({
+382 depth: 1 });
+393 depth: 2 voltageSources.push({
+399 depth: 1 });
+437 depth: 2 voltageSources.push({
+443 depth: 1 });
+449 depth: 2 voltageSources.push({
+455 depth: 1 });
+461 depth: 2 voltageSources.push({
+467 depth: 1 });
+517 depth: 2 segments.forEach(seg => {
+524 depth: 1 });
+553 depth: 2 voltageSources.push({
+559 depth: 1 });
+579 depth: 2 voltageSources.push({
+585 depth: 1 });
+612 depth: 2 voltageSources.push({
+618 depth: 1 });
+622 depth: 2 voltageSources.push({
+628 depth: 1 });
+666 depth: 2 voltageSources.push({
+672 depth: 1 });
+707 depth: 2 voltageSources.push({
+713 depth: 1 });
+720 depth: 2 diodes.forEach(d => {
+722 depth: 1 });
+726 depth: 2 bjts.forEach(t => {
+728 depth: 1 });
+748 depth: 2 switches.forEach(sw => {
+753 depth: 1 });
+756 depth: 2 diodes.forEach(d => {
+765 depth: 1 });
+768 depth: 2 bjts.forEach(t => {
+785 depth: 1 });
+794 depth: 2 components.forEach(comp => {
+965 depth: 1 });
+968 depth: 2 activeVoltageSources.forEach((src, idx) => {
+982 depth: 1 });
+985 depth: 2 extraRestr.forEach((restr, idx) => {
+1014 depth: 1 });
+1022 depth: 2 const bypassA = A.map((row, rIdx) =>
+1024 depth: 1 );
+1041 depth: 2 diodes.forEach(d => {
+1074 depth: 1 });
+1076 depth: 2 bjts.forEach(t => {
+1132 depth: 1 });
+1164 depth: 2 components.forEach(comp => {
+1349 depth: 3 const channels = ['d0', 'd1', 'd2', 'd3'].map(termId => {
+1356 depth: 2 });
+1461 depth: 3 if (
+1465 depth: 2 ) {
+1530 depth: 1 });
+1549 depth: 2 components.forEach(comp => {
+1558 depth: 3 } else if (
+1567 depth: 2 ) {
+1573 depth: 3 } else if (
+1576 depth: 2 ) {
+1583 depth: 1 });
+1592 depth: 2 wires.forEach(wire => {
+1598 depth: 1 });
+1618 depth: 2 Object.keys(adjacency).forEach(vertex => {
+1622 depth: 1 });

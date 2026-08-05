@@ -1167,7 +1167,29 @@ export default function App() {
     { type: 'voltmeter', name: 'Voltímetro', category: 'instruments', desc: 'Medidor de tensão entre dois pontos' },
     { type: 'ammeter', name: 'Amperímetro', category: 'instruments', desc: 'Medidor de corrente em série' },
     { type: 'oscilloscope', name: 'Osciloscópio 2 Canais', category: 'instruments', desc: 'Instrumento com pontas CH1/G1 e CH2/G2' },
-    { type: 'megohmmeter', name: 'Megômetro de Isolação', category: 'instruments', desc: 'Testador de alta tensão DC (250V-2500V) para resistência de isolação' }
+    { type: 'megohmmeter', name: 'Megômetro de Isolação', category: 'instruments', desc: 'Testador de alta tensão DC (250V-2500V) para resistência de isolação' },
+
+    // NOVOS COMPONENTES ESTILO PROTEUS
+    { type: 'lamp', name: 'Lâmpada (Lamp)', category: 'passives', desc: 'Lâmpada incandescente com indicação visual' },
+    { type: 'speaker', name: 'Alto-falante', category: 'electromechanical', desc: 'Emissor de som/onda audível' },
+    { type: 'audio_in', name: 'Entrada de Áudio', category: 'sources', desc: 'Fonte de sinal CA audível (1V/440Hz)' },
+    { type: 'vcc_terminal', name: 'Terminal VCC (+5V)', category: 'sources', desc: 'Fonte rápida lógica de +5V' },
+    { type: 'seven_segment', name: 'Display 7-Segmentos', category: 'semiconductors', desc: 'Display numérico LED com ponto decimal' },
+    { type: 'ic_7442', name: 'CI 7442', category: 'digital', desc: 'Decodificador BCD para Decimal' },
+    { type: 'adc_0808', name: 'CI ADC0808', category: 'digital', desc: 'Conversor A/D 8 bits 8 canais' },
+    { type: 'ic_555', name: 'CI 555', category: 'digital', desc: 'Timer / Oscilador 555' },
+    { type: 'regulator_7805', name: 'Regulador 7805', category: 'ics', desc: 'Regulador de Tensão 5V (TO-220)' },
+    { type: 'arduino_nano', name: 'Arduino Nano', category: 'ics', desc: 'Placa microcontroladora clássica' },
+    { type: 'opamp_tl072', name: 'TL072', category: 'semiconductors', desc: 'Amplificador Operacional Duplo' },
+    { type: 'opamp_tl074', name: 'TL074', category: 'semiconductors', desc: 'Amplificador Operacional Quádruplo' },
+    { type: 'transistor_2sc5200', name: '2SC5200 (NPN)', category: 'semiconductors', desc: 'Transistor de Potência TO-3P' },
+    { type: 'transistor_2sa1943', name: '2SA1943 (PNP)', category: 'semiconductors', desc: 'Transistor de Potência TO-3P' },
+    { type: 'transistor_tip41', name: 'TIP41 (NPN)', category: 'semiconductors', desc: 'Transistor de Potência TO-220' },
+    { type: 'transistor_tip42', name: 'TIP42 (PNP)', category: 'semiconductors', desc: 'Transistor de Potência TO-220' },
+    { type: 'diode_bridge', name: 'Ponte Retificadora', category: 'semiconductors', desc: 'Ponte de 4 diodos (KBPC)' },
+    { type: 'resistor_5w', name: 'Resistor 5W', category: 'passives', desc: 'Resistor de Potência (Cerâmico Branco)' },
+    { type: 'resistor_smd', name: 'Resistor SMD', category: 'passives', desc: 'Resistor SMD de montagem em superfície' },
+    { type: 'trimpot_multi', name: 'Trimpot Multivoltas', category: 'passives', desc: 'Trimpot de precisão multivoltas' }
   ];
 
   const categories = [
@@ -2208,7 +2230,7 @@ export default function App() {
             viewMode === 'schematic' ? (
               <>
                 {/* Object Selector (estilo Proteus) */}
-                <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+                <div className="flex flex-col flex-1 min-h-0 bg-slate-50 dark:bg-slate-900">
                   <div className="flex items-center px-2 py-1.5 bg-slate-200 dark:bg-slate-800 border-b border-slate-300 dark:border-slate-700">
                     <button
                       onClick={() => setShowPickDevicesModal(true)}
