@@ -674,14 +674,14 @@ export function getDefaultTerminals(type: string): { id: string; relX: number; r
 
   if (type === 'ic_555') {
     return [
-      { id: 'gnd', relX: -3, relY: 3, label: 'GND' },
-      { id: 'trig', relX: -3, relY: 1, label: 'TRIG' },
-      { id: 'out', relX: 3, relY: 1, label: 'OUT' },
-      { id: 'rst', relX: -3, relY: -1, label: 'RST' },
-      { id: 'ctrl', relX: -3, relY: -3, label: 'CTRL' },
-      { id: 'thr', relX: 3, relY: -1, label: 'THR' },
-      { id: 'dis', relX: 3, relY: -3, label: 'DIS' },
-      { id: 'vcc', relX: 3, relY: 3, label: 'VCC' }
+      { id: 'gnd', relX: -3, relY: -3, label: 'GND' },
+      { id: 'trig', relX: -3, relY: -1, label: 'TRIG' },
+      { id: 'out', relX: -3, relY: 1, label: 'OUT' },
+      { id: 'rst', relX: -3, relY: 3, label: 'RST' },
+      { id: 'ctrl', relX: 3, relY: 3, label: 'CTRL' },
+      { id: 'thr', relX: 3, relY: 1, label: 'THR' },
+      { id: 'dis', relX: 3, relY: -1, label: 'DIS' },
+      { id: 'vcc', relX: 3, relY: -3, label: 'VCC' }
     ];
   }
 
