@@ -193,7 +193,7 @@ export default function AiAssistantPanel({ isOpen, onClose, onLoadCircuit, curre
         // Em produção, usar a Netlify Serverless Function (chave fica no servidor)
         // Em desenvolvimento, usar o proxy do Vite
         const isDev = import.meta.env.DEV;
-        let aiText: string;
+        let aiText = '';
 
         if (!isDev) {
           // PRODUÇÃO: Netlify Function — API key fica no servidor
@@ -210,13 +210,23 @@ export default function AiAssistantPanel({ isOpen, onClose, onLoadCircuit, curre
             }),
           });
           
-          const proxyData = await proxyRes.json();
-          
-          if (!proxyRes.ok || proxyData.error) {
-            throw new Error(proxyData.error || `Erro do servidor (HTTP ${proxyRes.status})`);
+          let proxyData;
+          try {
+            proxyData = await proxyRes.json();
+          } catch (jsonErr) {
+            // Se falhou ao fazer parse do JSON (ex: Timeout do Netlify retornou página HTML 502/504)
+            // Fazemos o fallback para a chamada local direto do navegador, ignorando o limite de 10s do Netlify!
+            console.warn('O Proxy do Netlify retornou HTML (possível Timeout). Tentando chamada direta de fallback...');
+            aiText = await queryAzureFoundryApi(currentKey, currentEndpoint, prompt, circuitCtx, '', messages);
+            proxyData = null; // Indica que já resolvemos com o fallback
           }
           
-          aiText = proxyData.response;
+          if (proxyData) {
+            if (!proxyRes.ok || proxyData.error) {
+              throw new Error(proxyData.error || `Erro do servidor (HTTP ${proxyRes.status})`);
+            }
+            aiText = proxyData.response;
+          }
         } else {
           // DESENVOLVIMENTO: Vite proxy direto
           aiText = await queryAzureFoundryApi(currentKey, currentEndpoint, prompt, circuitCtx, '', messages);
