@@ -771,7 +771,7 @@ export async function queryAzureFoundryApi(
 
   const cleanUrl = baseUrl.replace(/\/$/, '');
   const rawPath = cleanUrl.split('?')[0];
-  const deployment = modelOrDeploymentName?.trim() || 'proj-eletronica';
+  const defaultDeployment = modelOrDeploymentName?.trim() || 'proj-eletronica';
 
   const baseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -849,7 +849,7 @@ export async function queryAzureFoundryApi(
             const runRes = await fetch(`${rawPath}/threads/${threadId}/runs?api-version=${ver}`, {
               method: 'POST',
               headers: h,
-              body: JSON.stringify({ assistant_id: deployment })
+              body: JSON.stringify({ assistant_id: defaultDeployment })
             });
 
             if (runRes.ok) {
@@ -906,14 +906,19 @@ export async function queryAzureFoundryApi(
     '2024-12-01-preview'
   ];
 
-  const candidateBasePaths = [
+  const candidateBasePaths: string[] = [
     rawPath.endsWith('/chat/completions') ? rawPath : `${rawPath}/chat/completions`,
     `${rawPath}/models/chat/completions`,
-    `${rawPath}/deployments/${deployment}/chat/completions`,
-    `${rawPath}/openai/deployments/${deployment}/chat/completions`,
-    `https://eletronica-sem-mimimi.services.ai.azure.com/models/chat/completions`,
-    `https://eletronica-sem-mimimi.openai.azure.com/openai/deployments/${deployment}/chat/completions`
+    `https://eletronica-sem-mimimi.services.ai.azure.com/models/chat/completions`
   ];
+
+  const deploymentsToTry = [defaultDeployment, 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o', 'gpt-35-turbo', 'eletronica-sem-mimimi'];
+
+  for (const dep of deploymentsToTry) {
+    candidateBasePaths.push(`${rawPath}/deployments/${dep}/chat/completions`);
+    candidateBasePaths.push(`${rawPath}/openai/deployments/${dep}/chat/completions`);
+    candidateBasePaths.push(`https://eletronica-sem-mimimi.openai.azure.com/openai/deployments/${dep}/chat/completions`);
+  }
 
   for (const basePath of candidateBasePaths) {
     for (const ver of apiVersions) {
@@ -948,7 +953,7 @@ export async function queryAzureFoundryApi(
 
   const bodiesToTry = [
     {
-      model: deployment,
+      model: defaultDeployment,
       messages: chatMessages,
       temperature: 0.7
     },

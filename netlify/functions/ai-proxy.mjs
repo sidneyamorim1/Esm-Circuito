@@ -285,7 +285,7 @@ COMPONENTES DISPONÍVEIS NO SIMULADOR:
     const chatVersions = ['2024-02-15-preview', '2025-01-01-preview', '2024-12-01-preview', '2024-10-21', '2024-10-01-preview', '2024-08-01-preview', '2024-06-01', '2024-02-01'];
     
     // Tentar com o nome do projeto e com o nome do modelo subjacente
-    const deployments = ['proj-eletronica', 'gpt-4.1-mini', 'eletronica-sem-mimimi', 'gpt-4o', 'gpt-35-turbo'];
+    const deployments = ['proj-eletronica', 'gpt-4.1', 'gpt-4.1-mini', 'eletronica-sem-mimimi', 'gpt-4o', 'gpt-35-turbo'];
 
     for (const dep of deployments) {
       const chatPaths = [
