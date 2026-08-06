@@ -1619,14 +1619,14 @@ export function drawComponent(
       const isDIP18 = comp.type === 'ic_lm3914' || comp.type === 'ic_lm3915';
       const width = 48; // Corpo plástico
       
-      let height = 128; 
+      let height = 140; 
       let pinsPerSide = 4;
       
       if (isDIP14) {
-        height = 224;
+        height = 260;
         pinsPerSide = 7;
       } else if (isDIP18) {
-        height = 300; 
+        height = 340; 
         pinsPerSide = 9;
       }
       
@@ -1688,7 +1688,14 @@ export function drawComponent(
       ctx.fillStyle = '#94a3b8';
       ctx.font = 'bold 10px monospace';
       ctx.textAlign = 'center';
-      const ciName = comp.type === 'ic_555' ? 'NE555' : (comp.type === 'opamp_tl072' ? 'TL072' : 'TL074');
+      
+      let ciName = 'IC';
+      if (comp.type === 'ic_555') ciName = 'NE555';
+      else if (comp.type === 'opamp_tl072') ciName = 'TL072';
+      else if (comp.type === 'opamp_tl074') ciName = 'TL074';
+      else if (comp.type === 'ic_lm3914') ciName = 'LM3914';
+      else if (comp.type === 'ic_lm3915') ciName = 'LM3915';
+      
       ctx.fillText(ciName, 0, 0);
       ctx.restore();
       
