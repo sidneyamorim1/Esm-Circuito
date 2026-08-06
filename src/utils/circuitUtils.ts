@@ -685,6 +685,29 @@ export function getDefaultTerminals(type: string): { id: string; relX: number; r
     ];
   }
 
+  if (type === 'ic_lm3914' || type === 'ic_lm3915') {
+    return [
+      { id: 'l1', relX: -3, relY: -8, label: 'LED1' },
+      { id: 'v_neg', relX: -3, relY: -6, label: 'V-' },
+      { id: 'v_pos', relX: -3, relY: -4, label: 'V+' },
+      { id: 'rlo', relX: -3, relY: -2, label: 'RLO' },
+      { id: 'sig', relX: -3, relY: 0, label: 'SIG' },
+      { id: 'rhi', relX: -3, relY: 2, label: 'RHI' },
+      { id: 'ref_out', relX: -3, relY: 4, label: 'REFOUT' },
+      { id: 'ref_adj', relX: -3, relY: 6, label: 'REFADJ' },
+      { id: 'mode', relX: -3, relY: 8, label: 'MODE' },
+      { id: 'l10', relX: 3, relY: 8, label: 'LED10' },
+      { id: 'l9', relX: 3, relY: 6, label: 'LED9' },
+      { id: 'l8', relX: 3, relY: 4, label: 'LED8' },
+      { id: 'l7', relX: 3, relY: 2, label: 'LED7' },
+      { id: 'l6', relX: 3, relY: 0, label: 'LED6' },
+      { id: 'l5', relX: 3, relY: -2, label: 'LED5' },
+      { id: 'l4', relX: 3, relY: -4, label: 'LED4' },
+      { id: 'l3', relX: 3, relY: -6, label: 'LED3' },
+      { id: 'l2', relX: 3, relY: -8, label: 'LED2' }
+    ];
+  }
+
   if (type === 'opamp_tl072') {
     return [
       { id: 'out1', relX: -3, relY: -3, label: '1OUT' },
@@ -807,6 +830,8 @@ export function createCircuitComponent(
     adc_0808: 'CI ADC0808',
     vcc_terminal: 'VCC',
     ic_555: '555 Timer',
+    ic_lm3914: 'LM3914',
+    ic_lm3915: 'LM3915',
     opamp_tl072: 'TL072',
     opamp_tl074: 'TL074',
     transistor_2sc5200: '2SC5200 NPN',

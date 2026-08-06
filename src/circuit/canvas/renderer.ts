@@ -1612,11 +1612,24 @@ export function drawComponent(
 
     case 'ic_555':
     case 'opamp_tl072':
-    case 'opamp_tl074': {
+    case 'opamp_tl074':
+    case 'ic_lm3914':
+    case 'ic_lm3915': {
       const isDIP14 = comp.type === 'opamp_tl074';
+      const isDIP18 = comp.type === 'ic_lm3914' || comp.type === 'ic_lm3915';
       const width = 48; // Corpo plástico
-      const height = isDIP14 ? 224 : 128; 
-      const pinsPerSide = isDIP14 ? 7 : 4;
+      
+      let height = 128; 
+      let pinsPerSide = 4;
+      
+      if (isDIP14) {
+        height = 224;
+        pinsPerSide = 7;
+      } else if (isDIP18) {
+        height = 300; 
+        pinsPerSide = 9;
+      }
+      
       const pinSpacing = 2 * GRID_SIZE; // Era 32, mas 2 * 20 = 40!
       const startY = -((pinsPerSide - 1) * pinSpacing) / 2;
       const pinLengthX = 3 * GRID_SIZE; // Era 48, mas 3 * 20 = 60!

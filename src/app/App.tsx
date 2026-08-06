@@ -1178,6 +1178,8 @@ export default function App() {
     { type: 'ic_7442', name: 'CI 7442', category: 'digital', desc: 'Decodificador BCD para Decimal' },
     { type: 'adc_0808', name: 'CI ADC0808', category: 'digital', desc: 'Conversor A/D 8 bits 8 canais' },
     { type: 'ic_555', name: 'CI 555', category: 'digital', desc: 'Timer / Oscilador 555' },
+    { type: 'ic_lm3914', name: 'CI LM3914', category: 'ics', desc: 'Driver de Display (Ponto/Barra) Linear' },
+    { type: 'ic_lm3915', name: 'CI LM3915', category: 'ics', desc: 'Driver de Display (Ponto/Barra) Logarítmico' },
     { type: 'regulator_7805', name: 'Regulador 7805', category: 'ics', desc: 'Regulador de Tensão 5V (TO-220)' },
     { type: 'arduino_nano', name: 'Arduino Nano', category: 'ics', desc: 'Placa microcontroladora clássica' },
     { type: 'opamp_tl072', name: 'TL072', category: 'semiconductors', desc: 'Amplificador Operacional Duplo' },

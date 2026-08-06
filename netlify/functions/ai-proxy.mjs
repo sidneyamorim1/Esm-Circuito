@@ -105,6 +105,8 @@ COMPONENTES DISPONÍVEIS NO SIMULADOR:
 • relay — Relé | Terminais: [coil1, coil2, com, nc, no]
 • speaker — Alto-falante | Terminais: [t1, t2] | Props: impedance
 • ic_555 — 555 Timer | Terminais: [gnd, trig, out, rst, ctrl, thr, dis, vcc]
+• ic_lm3914 — LM3914 Dot/Bar Display Driver (Linear) | Terminais: [l1, v_neg, v_pos, rlo, sig, rhi, ref_out, ref_adj, mode, l10, l9, l8, l7, l6, l5, l4, l3, l2]
+• ic_lm3915 — LM3915 Dot/Bar Display Driver (Logarithmic) | Terminais: [l1, v_neg, v_pos, rlo, sig, rhi, ref_out, ref_adj, mode, l10, l9, l8, l7, l6, l5, l4, l3, l2]
 • opamp_tl072 — Op-Amp TL072 (dual) | Terminais: [out1, in1n, in1p, vccn, in2p, in2n, out2, vccp]
 • opamp_tl074 — Op-Amp TL074 (quad) | Terminais: [out1, in1n, in1p, vccp, in2p, in2n, out2, out3, in3n, in3p, vccn, in4p, in4n, out4]
 • regulator_7805 — LM7805 | Terminais: [in, gnd, out]

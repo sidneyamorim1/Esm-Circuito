@@ -55,6 +55,8 @@ export function buildComponentCatalog(): string {
     { type: 'relay', name: 'Relé', terminals: 'coil1, coil2, com, nc, no', props: 'coilResistance (Ω), triggerVoltage (V)' },
     { type: 'speaker', name: 'Alto-falante', terminals: 't1, t2', props: 'impedance (Ω, padrão: 8)' },
     { type: 'ic_555', name: '555 Timer', terminals: 'gnd, trig, out, rst, ctrl, thr, dis, vcc' },
+    { type: 'ic_lm3914', name: 'LM3914 Dot/Bar Display Driver (Linear)', terminals: 'l1, v_neg, v_pos, rlo, sig, rhi, ref_out, ref_adj, mode, l10, l9, l8, l7, l6, l5, l4, l3, l2' },
+    { type: 'ic_lm3915', name: 'LM3915 Dot/Bar Display Driver (Logarithmic)', terminals: 'l1, v_neg, v_pos, rlo, sig, rhi, ref_out, ref_adj, mode, l10, l9, l8, l7, l6, l5, l4, l3, l2' },
     { type: 'opamp_tl072', name: 'Op-Amp TL072 (dual)', terminals: 'out1, in1n, in1p, vccn, in2p, in2n, out2, vccp' },
     { type: 'opamp_tl074', name: 'Op-Amp TL074 (quad)', terminals: 'out1, in1n, in1p, vccp, in2p, in2n, out2, out3, in3n, in3p, vccn, in4p, in4n, out4' },
     { type: 'regulator_7805', name: 'Regulador LM7805', terminals: 'in, gnd, out' },
