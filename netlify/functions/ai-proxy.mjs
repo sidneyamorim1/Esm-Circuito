@@ -143,7 +143,7 @@ COMPONENTES DISPONÍVEIS NO SIMULADOR:
 
     // Construir mensagens com histórico de conversa
     const buildMessages = (sysContent) => {
-      const msgs = [{ role: 'user', content: `${sysContent}\n\nContexto do Circuito:\n${circuitContext || 'Vazio'}` }];
+      const msgs = [{ role: 'user', content: sysContent }];
       // Adicionar histórico se disponível
       if (chatHistory && Array.isArray(chatHistory) && chatHistory.length > 0) {
         const recent = chatHistory.slice(-6);
@@ -154,15 +154,15 @@ COMPONENTES DISPONÍVEIS NO SIMULADOR:
           });
         }
       }
-      // Mensagem atual
-      const lastMsg = msgs[msgs.length - 1];
-      if (!lastMsg || lastMsg.content !== prompt) {
-        msgs.push({ role: 'user', content: prompt });
-      }
+      
+      const promptWithContext = `[ESTADO ATUAL DO SIMULADOR (LIDO AUTOMATICAMENTE DA TELA DO USUÁRIO)]\n${circuitContext || 'Vazio'}\n\n[MENSAGEM DO USUÁRIO]\n${prompt}`;
+      
+      // Mensagem atual sempre com o contexto da tela injetado
+      msgs.push({ role: 'user', content: promptWithContext });
       return msgs;
     };
 
-    const userMessage = `${systemInstruction}\n\nContexto do Circuito Atual do Usuário:\n${circuitContext || 'Nenhum circuito montado.'}\n\nPergunta do Usuário:\n${prompt}`;
+    const userMessage = `[ESTADO ATUAL DO SIMULADOR (LIDO AUTOMATICAMENTE)]\n${circuitContext || 'Vazio'}\n\n[MENSAGEM DO USUÁRIO]\n${prompt}`;
 
     const diagnosticLogs = [];
 

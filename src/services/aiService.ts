@@ -929,10 +929,6 @@ export async function queryAzureFoundryApi(
     { role: 'system', content: systemInstruction }
   ];
 
-  // Adicionar contexto do circuito
-  chatMessages.push({ role: 'user', content: `Contexto do Circuito Atual do Usuário:\n${circuitContext}` });
-  chatMessages.push({ role: 'assistant', content: 'Entendido, analisei o circuito. Como posso ajudar?' });
-
   // Adicionar histórico de conversa
   if (chatHistory && chatHistory.length > 0) {
     const recentHistory = chatHistory.slice(-6);
@@ -945,11 +941,10 @@ export async function queryAzureFoundryApi(
     }
   }
 
-  // Mensagem atual do usuário
-  const lastChatMsg = chatMessages[chatMessages.length - 1];
-  if (!lastChatMsg || lastChatMsg.content !== prompt) {
-    chatMessages.push({ role: 'user', content: prompt });
-  }
+  const promptWithContext = `[ESTADO ATUAL DO SIMULADOR (LIDO AUTOMATICAMENTE DA TELA DO USUÁRIO)]\n${circuitContext || 'Vazio'}\n\n[MENSAGEM DO USUÁRIO]\n${prompt}`;
+
+  // Mensagem atual do usuário com contexto injetado
+  chatMessages.push({ role: 'user', content: promptWithContext });
 
   const bodiesToTry = [
     {
