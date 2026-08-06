@@ -15,6 +15,7 @@ import {
   explainCircuit,
   buildCircuitContext,
   generateCircuitFromPrompt,
+  parseAiCircuitResponse,
   queryGeminiApi,
   queryAzureFoundryApi,
   DEFAULT_AZURE_FOUNDRY_ENDPOINT,
@@ -199,7 +200,14 @@ export default function AiAssistantPanel({ isOpen, onClose, onLoadCircuit, curre
           const proxyRes = await fetch('/api/ai-proxy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, circuitContext: circuitCtx }),
+            body: JSON.stringify({
+              prompt,
+              circuitContext: circuitCtx,
+              chatHistory: messages.filter(m => m.id !== 'welcome').slice(-6).map(m => ({
+                role: m.sender === 'user' ? 'user' : 'assistant',
+                content: m.text
+              }))
+            }),
           });
           
           const proxyData = await proxyRes.json();
@@ -211,22 +219,28 @@ export default function AiAssistantPanel({ isOpen, onClose, onLoadCircuit, curre
           aiText = proxyData.response;
         } else {
           // DESENVOLVIMENTO: Vite proxy direto
-          aiText = await queryAzureFoundryApi(currentKey, currentEndpoint, prompt, circuitCtx);
+          aiText = await queryAzureFoundryApi(currentKey, currentEndpoint, prompt, circuitCtx, '', messages);
         }
 
-        const generated = generateCircuitFromPrompt(prompt);
+        // Tentar parsear circuito gerado pela IA (bloco circuit-json)
+        const aiGenerated = parseAiCircuitResponse(aiText);
+        // Fallback: tentar gerar pelo motor local de templates
+        const localGenerated = !aiGenerated ? generateCircuitFromPrompt(prompt) : null;
+        const circuitData = aiGenerated || localGenerated;
+        // Se a IA gerou circuito, usar o texto limpo (sem o bloco JSON)
+        const displayText = aiGenerated ? aiGenerated.cleanText || aiText : aiText;
 
         setMessages(prev => [
           ...prev,
           {
             id: (Date.now() + 1).toString(),
             sender: 'ai',
-            text: aiText,
+            text: displayText,
             timestamp: new Date(),
-            action: generated ? {
-              label: `Inserir ${generated.name}`,
-              type: 'load_template',
-              data: generated
+            action: circuitData ? {
+              label: `Inserir ${circuitData.name}`,
+              type: 'load_template' as const,
+              data: circuitData
             } : undefined
           }
         ]);
@@ -234,20 +248,24 @@ export default function AiAssistantPanel({ isOpen, onClose, onLoadCircuit, curre
         return;
       } else if (currentKey && !forceLocal) {
         const circuitCtx = buildCircuitContext(components, wires);
-        const aiText = await queryGeminiApi(currentKey, prompt, circuitCtx);
-        const generated = generateCircuitFromPrompt(prompt);
+        const aiText = await queryGeminiApi(currentKey, prompt, circuitCtx, messages);
+        // Tentar parsear circuito gerado pela IA
+        const aiGenerated = parseAiCircuitResponse(aiText);
+        const localGenerated = !aiGenerated ? generateCircuitFromPrompt(prompt) : null;
+        const circuitData = aiGenerated || localGenerated;
+        const displayText = aiGenerated ? aiGenerated.cleanText || aiText : aiText;
         
         setMessages(prev => [
           ...prev,
           {
             id: (Date.now() + 1).toString(),
             sender: 'ai',
-            text: aiText,
+            text: displayText,
             timestamp: new Date(),
-            action: generated ? {
-              label: `Inserir ${generated.name}`,
-              type: 'load_template',
-              data: generated
+            action: circuitData ? {
+              label: `Inserir ${circuitData.name}`,
+              type: 'load_template' as const,
+              data: circuitData
             } : undefined
           }
         ]);

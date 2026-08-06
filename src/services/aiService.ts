@@ -1,5 +1,5 @@
 import type { CircuitComponent, CircuitWire } from '../types/circuit';
-import { createCircuitComponent } from '../utils/circuitUtils';
+import { createCircuitComponent, getDefaultTerminals } from '../utils/circuitUtils';
 
 export interface DiagnosticIssue {
   type: 'error' | 'warning' | 'info';
@@ -24,6 +24,209 @@ export interface AiChatMessage {
     type: 'load_template' | 'highlight';
     data?: any;
   };
+}
+
+/**
+ * Gera o catálogo de componentes disponíveis no simulador para incluir no system prompt da IA.
+ * Isso permite que a IA conheça todos os tipos de componentes, seus terminais e propriedades.
+ */
+export function buildComponentCatalog(): string {
+  const componentTypes: { type: string; name: string; terminals: string; props?: string }[] = [
+    { type: 'source_dc', name: 'Fonte DC', terminals: 'p (+), n (-)', props: 'voltage (V, padrão: 5)' },
+    { type: 'source_ac', name: 'Fonte AC', terminals: 'p (+), n (-)', props: 'amplitude (V, padrão: 5), frequency (Hz, padrão: 60)' },
+    { type: 'source_pulse', name: 'Gerador de Pulso', terminals: 'p (+), n (-)', props: 'amplitude (V), frequency (Hz), dutyCycle (%)' },
+    { type: 'function_generator', name: 'Gerador de Funções', terminals: 'p (+), n (-)', props: 'waveform (sine|square|triangle|sawtooth), frequency (Hz), amplitude (V)' },
+    { type: 'source_current', name: 'Fonte de Corrente', terminals: 'p (+), n (-)', props: 'current (A, padrão: 0.01)' },
+    { type: 'resistor', name: 'Resistor', terminals: 't1, t2', props: 'resistance (Ω, padrão: 1000)' },
+    { type: 'capacitor', name: 'Capacitor', terminals: 't1, t2', props: 'capacitance (F, padrão: 1e-6, ex: 100uF=0.0001)' },
+    { type: 'inductor', name: 'Indutor', terminals: 't1, t2', props: 'inductance (H, padrão: 1e-3, ex: 100mH=0.1)' },
+    { type: 'led', name: 'LED', terminals: 'a (anodo), c (catodo)', props: 'color (red|green|blue|yellow|orange|white)' },
+    { type: 'diodo', name: 'Diodo de Silício', terminals: 'a (anodo), c (catodo)' },
+    { type: 'zener', name: 'Diodo Zener', terminals: 'a (anodo), c (catodo)', props: 'zenerVoltage (V, padrão: 5.1)' },
+    { type: 'transistor_bjt_npn', name: 'Transistor NPN', terminals: 'c (coletor), b (base), e (emissor)', props: 'beta (ganho, padrão: 100)' },
+    { type: 'transistor_bjt_pnp', name: 'Transistor PNP', terminals: 'c (coletor), b (base), e (emissor)', props: 'beta (ganho, padrão: 100)' },
+    { type: 'switch', name: 'Chave/Interruptor', terminals: 't1, t2', props: 'state (boolean, padrão: false=aberta)' },
+    { type: 'ground', name: 'Terra (GND)', terminals: 'gnd' },
+    { type: 'pot', name: 'Potenciômetro', terminals: 'a, b, w (cursor)', props: 'resistance (Ω, padrão: 10000), setting (%, padrão: 50)' },
+    { type: 'voltmeter', name: 'Voltímetro', terminals: 'p (+), n (-)' },
+    { type: 'ammeter', name: 'Amperímetro', terminals: 'p (+), n (-)' },
+    { type: 'lamp', name: 'Lâmpada', terminals: 't1, t2', props: 'nominalVoltage (V, padrão: 12)' },
+    { type: 'motor_dc', name: 'Motor DC', terminals: 't1, t2', props: 'resistance (Ω, padrão: 10)' },
+    { type: 'relay', name: 'Relé', terminals: 'coil1, coil2, com, nc, no', props: 'coilResistance (Ω), triggerVoltage (V)' },
+    { type: 'speaker', name: 'Alto-falante', terminals: 't1, t2', props: 'impedance (Ω, padrão: 8)' },
+    { type: 'ic_555', name: '555 Timer', terminals: 'gnd, trig, out, rst, ctrl, thr, dis, vcc' },
+    { type: 'opamp_tl072', name: 'Op-Amp TL072 (dual)', terminals: 'out1, in1n, in1p, vccn, in2p, in2n, out2, vccp' },
+    { type: 'opamp_tl074', name: 'Op-Amp TL074 (quad)', terminals: 'out1, in1n, in1p, vccp, in2p, in2n, out2, out3, in3n, in3p, vccn, in4p, in4n, out4' },
+    { type: 'regulator_7805', name: 'Regulador LM7805', terminals: 'in, gnd, out' },
+    { type: 'diode_bridge', name: 'Ponte Retificadora', terminals: 'ac1 (~), pos (+), ac2 (~), neg (-)' },
+    { type: 'transistor_2sc5200', name: 'Transistor 2SC5200 NPN (potência)', terminals: 'c, b, e', props: 'beta (ganho, padrão: 80)' },
+    { type: 'transistor_2sa1943', name: 'Transistor 2SA1943 PNP (potência)', terminals: 'c, b, e', props: 'beta (ganho, padrão: 80)' },
+    { type: 'transistor_tip41', name: 'Transistor TIP41 NPN (potência)', terminals: 'c, b, e', props: 'beta (ganho, padrão: 50)' },
+    { type: 'transistor_tip42', name: 'Transistor TIP42 PNP (potência)', terminals: 'c, b, e', props: 'beta (ganho, padrão: 50)' },
+    { type: 'resistor_5w', name: 'Resistor 5W (potência)', terminals: 't1, t2', props: 'resistance (Ω, padrão: 1000)' },
+    { type: 'capacitor_ceramic', name: 'Capacitor Cerâmico', terminals: 't1, t2', props: 'capacitance (F, padrão: 1e-6)' },
+    { type: 'capacitor_polyester', name: 'Capacitor Poliéster', terminals: 't1, t2', props: 'capacitance (F, padrão: 1e-6)' },
+    { type: 'trimpot_multi', name: 'Trimpot Multivoltas', terminals: 'a, b, w (cursor)', props: 'resistance (Ω, padrão: 10000), setting (%, padrão: 50)' },
+    { type: 'seven_segment', name: 'Display 7 Segmentos', terminals: 'a, b, c, d, e, f, g, dp, com', props: 'mode (cathode|anode), color (red|green|blue|yellow)' },
+    { type: 'arduino_nano', name: 'Arduino Nano', terminals: 'p1..p30 (TX1, RX0, RST, GND, D2-D13, VIN, 5V, 3V3, A0-A7, REF)' },
+    { type: 'ldr', name: 'LDR (Fotoresistor)', terminals: 't1, t2', props: 'light (%, padrão: 50)' },
+    { type: 'bench_supply', name: 'Fonte de Bancada', terminals: 'p (+), n (-)', props: 'voltage (V), currentLimit (A)' },
+  ];
+
+  let catalog = 'CATÁLOGO DE COMPONENTES DISPONÍVEIS NO SIMULADOR:\n';
+  catalog += '(Use estes tipos exatos no campo "type" do JSON)\n\n';
+
+  componentTypes.forEach(ct => {
+    catalog += `• ${ct.type} — ${ct.name} | Terminais: [${ct.terminals}]`;
+    if (ct.props) catalog += ` | Propriedades: ${ct.props}`;
+    catalog += '\n';
+  });
+
+  return catalog;
+}
+
+/**
+ * Parseia a resposta da IA buscando um bloco ```circuit-json``` e converte
+ * para componentes e fios do simulador usando createCircuitComponent().
+ */
+export function parseAiCircuitResponse(aiText: string): {
+  name: string;
+  components: CircuitComponent[];
+  wires: CircuitWire[];
+  cleanText: string;
+} | null {
+  // Busca bloco ```circuit-json ... ```
+  const jsonBlockRegex = /```circuit-json\s*\n([\s\S]*?)\n\s*```/;
+  const match = aiText.match(jsonBlockRegex);
+  if (!match) return null;
+
+  try {
+    const jsonStr = match[1].trim();
+    const parsed = JSON.parse(jsonStr);
+
+    if (!parsed.components || !Array.isArray(parsed.components) || parsed.components.length === 0) {
+      return null;
+    }
+
+    // Criar componentes reais via createCircuitComponent
+    const components: CircuitComponent[] = [];
+    for (const compDef of parsed.components) {
+      const comp = createCircuitComponent(
+        compDef.type,
+        compDef.x ?? 10,
+        compDef.y ?? 10,
+        compDef.rotation ?? 0
+      );
+
+      // Aplicar propriedades customizadas
+      if (compDef.props && typeof compDef.props === 'object') {
+        for (const [key, value] of Object.entries(compDef.props)) {
+          if (comp.properties[key]) {
+            comp.properties[key].value = value as any;
+          }
+        }
+      }
+
+      components.push(comp);
+    }
+
+    // Criar fios — formato: { from: [indexComp, terminalId], to: [indexComp, terminalId] }
+    const wires: CircuitWire[] = [];
+    if (parsed.wires && Array.isArray(parsed.wires)) {
+      parsed.wires.forEach((wireDef: any, idx: number) => {
+        const fromIdx = wireDef.from?.[0];
+        const fromTerminal = wireDef.from?.[1];
+        const toIdx = wireDef.to?.[0];
+        const toTerminal = wireDef.to?.[1];
+
+        if (
+          typeof fromIdx === 'number' && typeof toIdx === 'number' &&
+          fromIdx >= 0 && fromIdx < components.length &&
+          toIdx >= 0 && toIdx < components.length &&
+          typeof fromTerminal === 'string' && typeof toTerminal === 'string'
+        ) {
+          // Verificar que os terminais existem nos componentes
+          const fromComp = components[fromIdx];
+          const toComp = components[toIdx];
+          const fromTermExists = fromComp.terminals.some(t => t.id === fromTerminal);
+          const toTermExists = toComp.terminals.some(t => t.id === toTerminal);
+
+          if (fromTermExists && toTermExists) {
+            wires.push({
+              id: `wai_${idx}`,
+              from: { componentId: fromComp.id, terminalId: fromTerminal },
+              to: { componentId: toComp.id, terminalId: toTerminal }
+            });
+          }
+        }
+      });
+    }
+
+    // Remover o bloco JSON do texto para exibição limpa
+    const cleanText = aiText.replace(jsonBlockRegex, '').trim();
+
+    return {
+      name: parsed.name || 'Circuito Gerado pela IA',
+      components,
+      wires,
+      cleanText
+    };
+  } catch (e) {
+    console.warn('[ESM IA] Falha ao parsear circuit-json da IA:', e);
+    return null;
+  }
+}
+
+/**
+ * Instrução de sistema completa para a IA, incluindo catálogo de componentes e
+ * formato de resposta para geração de circuitos.
+ */
+export function buildSystemInstruction(): string {
+  const catalog = buildComponentCatalog();
+
+  return `Você é o ESM IA, um assistente especialista em engenharia elétrica, eletrônica, física de semicondutores e simulação de circuitos.
+Você está integrado a um simulador de circuitos interativo. O usuário monta circuitos na board e você recebe o estado completo do circuito (componentes, valores, conexões e simulação) como contexto.
+
+REGRAS GERAIS:
+1. SEMPRE analise o contexto do circuito fornecido — ele contém os componentes reais, seus valores, as conexões entre terminais e o estado da simulação.
+2. Ao DIAGNOSTICAR: identifique erros de montagem, componentes sem conexão, valores inadequados (resistores muito baixos, tensões excessivas), ausência de GND, LEDs sem resistor limitador, curtos-circuitos e componentes queimados. Sugira correções específicas com valores numéricos.
+3. Ao EXPLICAR: descreva o funcionamento do circuito real montado, explicando o papel de cada componente, o percurso da corrente, as tensões esperadas em cada nó e os princípios teóricos (Lei de Ohm, Kirchhoff, divisor de tensão, etc).
+4. Responda SEMPRE em Português do Brasil (PT-BR), de forma clara, didática e motivadora.
+5. Use formatação markdown (negritos, listas, tabelas e LaTeX simples para fórmulas como $I = \\\\frac{V}{R}$).
+6. Se o circuito estiver vazio e o usuário pedir para criar/montar/sugerir um circuito, GERE o circuito usando o formato JSON abaixo.
+
+REGRAS DE GERAÇÃO DE CIRCUITOS:
+Quando o usuário pedir para criar, montar, gerar ou sugerir um circuito (incluindo respostas afirmativas como "sim", "pode ser", "quero", "faz aí", "monta" a uma proposta anterior sua), você DEVE responder incluindo um bloco de código \`\`\`circuit-json com o circuito no formato abaixo.
+
+FORMATO DO BLOCO circuit-json:
+\`\`\`circuit-json
+{
+  "name": "Nome do Circuito",
+  "components": [
+    { "type": "source_dc", "x": 8, "y": 10, "rotation": 90, "props": { "voltage": 9 } },
+    { "type": "resistor", "x": 14, "y": 8, "rotation": 0, "props": { "resistance": 330 } },
+    { "type": "led", "x": 20, "y": 10, "rotation": 90 },
+    { "type": "ground", "x": 20, "y": 14, "rotation": 90 }
+  ],
+  "wires": [
+    { "from": [0, "p"], "to": [1, "t1"] },
+    { "from": [1, "t2"], "to": [2, "a"] },
+    { "from": [2, "c"], "to": [3, "gnd"] },
+    { "from": [0, "n"], "to": [3, "gnd"] }
+  ]
+}
+\`\`\`
+
+REGRAS DO JSON:
+- "components" é um array de objetos. Cada um tem: type (string do catálogo), x e y (posição no grid, espaçar pelo menos 6 unidades entre componentes), rotation (0, 90, 180 ou 270), props (objeto com propriedades, opcional).
+- "wires" é um array. Cada fio usa [índice_do_componente, "terminal_id"]. O índice é baseado na posição do componente no array "components" (começando em 0).
+- Use APENAS tipos e terminais listados no catálogo abaixo.
+- SEMPRE inclua um componente ground (terra) e conecte o negativo da fonte ao terra.
+- Posicione componentes de forma organizada: fontes à esquerda, componentes em série no meio, cargas à direita, GND embaixo.
+- Espaçe os componentes pelo menos 6 unidades de grid para evitar sobreposição.
+- Junto com o bloco JSON, inclua uma explicação didática do circuito gerado (fora do bloco de código).
+
+${catalog}`;
 }
 
 /**
@@ -461,7 +664,7 @@ export function generateCircuitFromPrompt(prompt: string): { name: string; compo
 /**
  * Consulta opcional à API do Google Gemini se o usuário informar a API Key
  */
-export async function queryGeminiApi(apiKey: string, prompt: string, circuitContext: string): Promise<string> {
+export async function queryGeminiApi(apiKey: string, prompt: string, circuitContext: string, chatHistory?: AiChatMessage[]): Promise<string> {
   const endpointsToTry = [
     { version: 'v1beta', model: 'gemini-2.0-flash' },
     { version: 'v1beta', model: 'gemini-2.0-flash-lite' },
@@ -470,19 +673,44 @@ export async function queryGeminiApi(apiKey: string, prompt: string, circuitCont
     { version: 'v1beta', model: 'gemini-1.5-flash' }
   ];
 
-  const systemInstruction = `Você é o ESM AI, um assistente especialista em engenharia elétrica, física de semicondutores e simulação de circuitos. 
-Responda de forma clara, didática e motivadora em Português do Brasil (PT-BR). 
-Use formatação markdown (negritos, listas e LaTeX simples para fórmulas).`;
+  const systemInstruction = buildSystemInstruction();
+
+  // Construir conversa multi-turn com histórico
+  const contents: { role: string; parts: { text: string }[] }[] = [];
+
+  // Primeira mensagem com contexto do circuito
+  contents.push({
+    role: 'user',
+    parts: [{ text: `${systemInstruction}\n\nContexto do Circuito Atual do Usuário:\n${circuitContext}` }]
+  });
+  contents.push({
+    role: 'model',
+    parts: [{ text: 'Entendido! Estou pronto para ajudar com o circuito. Como posso ajudar?' }]
+  });
+
+  // Adicionar histórico de conversa (últimas mensagens)
+  if (chatHistory && chatHistory.length > 0) {
+    const recentHistory = chatHistory.slice(-6); // Últimas 6 mensagens
+    for (const msg of recentHistory) {
+      if (msg.id === 'welcome') continue; // Pular mensagem de boas-vindas
+      contents.push({
+        role: msg.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+      });
+    }
+  }
+
+  // Mensagem atual do usuário (se não estiver duplicada no histórico)
+  const lastHistoryMsg = chatHistory?.[chatHistory.length - 1];
+  if (!lastHistoryMsg || lastHistoryMsg.text !== prompt) {
+    contents.push({
+      role: 'user',
+      parts: [{ text: prompt }]
+    });
+  }
 
   const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: `${systemInstruction}\n\nContexto do Circuito Atual do Usuário:\n${circuitContext}\n\nPergunta do Usuário:\n${prompt}` }
-        ]
-      }
-    ]
+    contents
   };
 
   let lastError = '';
@@ -522,18 +750,10 @@ export async function queryAzureFoundryApi(
   endpointUrl: string = DEFAULT_AZURE_FOUNDRY_ENDPOINT,
   prompt: string,
   circuitContext: string,
-  modelOrDeploymentName: string = ''
+  modelOrDeploymentName: string = '',
+  chatHistory?: AiChatMessage[]
 ): Promise<string> {
-  const systemInstruction = `Você é o ESM IA, um assistente especialista em engenharia elétrica, eletrônica, física de semicondutores e simulação de circuitos.
-Você está integrado a um simulador de circuitos interativo. O usuário monta circuitos na board e você recebe o estado completo do circuito (componentes, valores, conexões e simulação) como contexto.
-
-REGRAS:
-1. SEMPRE analise o contexto do circuito fornecido — ele contém os componentes reais, seus valores, as conexões entre terminais e o estado da simulação.
-2. Ao DIAGNOSTICAR: identifique erros de montagem, componentes sem conexão, valores inadequados (resistores muito baixos, tensões excessivas), ausência de GND, LEDs sem resistor limitador, curtos-circuitos e componentes queimados. Sugira correções específicas com valores numéricos.
-3. Ao EXPLICAR: descreva o funcionamento do circuito real montado, explicando o papel de cada componente, o percurso da corrente, as tensões esperadas em cada nó e os princípios teóricos (Lei de Ohm, Kirchhoff, divisor de tensão, etc).
-4. Responda SEMPRE em Português do Brasil (PT-BR), de forma clara, didática e motivadora.
-5. Use formatação markdown (negritos, listas, tabelas e LaTeX simples para fórmulas como $I = \\\\frac{V}{R}$).
-6. Se o circuito estiver vazio, oriente o usuário a adicionar componentes pela biblioteca.`;
+  const systemInstruction = buildSystemInstruction();
 
   let baseUrl = (endpointUrl || DEFAULT_AZURE_FOUNDRY_ENDPOINT).trim();
   const keyToUse = apiKey?.trim() || import.meta.env?.VITE_AZURE_FOUNDRY_KEY || import.meta.env?.VITE_AI_API_KEY || '';
@@ -582,11 +802,31 @@ REGRAS:
     for (const h of [agentHeaders, baseHeaders]) {
       try {
         const threadUrl = `${rawPath}/threads?api-version=${ver}`;
+        // Construir mensagens com histórico para o thread
+        const threadMessages: { role: string; content: string }[] = [];
+        if (chatHistory && chatHistory.length > 0) {
+          const recentHistory = chatHistory.slice(-6);
+          for (const msg of recentHistory) {
+            if (msg.id === 'welcome') continue;
+            threadMessages.push({
+              role: msg.sender === 'user' ? 'user' : 'assistant',
+              content: msg.text
+            });
+          }
+        }
+        // Se a mensagem atual não está no histórico, adicioná-la
+        const lastMsg = threadMessages[threadMessages.length - 1];
+        if (!lastMsg || lastMsg.content !== prompt) {
+          threadMessages.push({
+            role: 'user',
+            content: `${systemInstruction}\n\nContexto do Circuito Atual do Usuário:\n${circuitContext}\n\nPergunta do Usuário:\n${prompt}`
+          });
+        }
         const threadRes = await fetch(threadUrl, {
           method: 'POST',
           headers: h,
           body: JSON.stringify({
-            messages: [
+            messages: threadMessages.length > 0 ? threadMessages : [
               {
                 role: 'user',
                 content: `${systemInstruction}\n\nContexto do Circuito Atual do Usuário:\n${circuitContext}\n\nPergunta do Usuário:\n${prompt}`
@@ -682,20 +922,41 @@ REGRAS:
     }
   }
 
+  // Construir mensagens do chat completions com histórico
+  const chatMessages: { role: string; content: string }[] = [
+    { role: 'system', content: systemInstruction }
+  ];
+
+  // Adicionar contexto do circuito
+  chatMessages.push({ role: 'user', content: `Contexto do Circuito Atual do Usuário:\n${circuitContext}` });
+  chatMessages.push({ role: 'assistant', content: 'Entendido, analisei o circuito. Como posso ajudar?' });
+
+  // Adicionar histórico de conversa
+  if (chatHistory && chatHistory.length > 0) {
+    const recentHistory = chatHistory.slice(-6);
+    for (const msg of recentHistory) {
+      if (msg.id === 'welcome') continue;
+      chatMessages.push({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      });
+    }
+  }
+
+  // Mensagem atual do usuário
+  const lastChatMsg = chatMessages[chatMessages.length - 1];
+  if (!lastChatMsg || lastChatMsg.content !== prompt) {
+    chatMessages.push({ role: 'user', content: prompt });
+  }
+
   const bodiesToTry = [
     {
       model: deployment,
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: `Contexto do Circuito Atual do Usuário:\n${circuitContext}\n\nPergunta do Usuário:\n${prompt}` }
-      ],
+      messages: chatMessages,
       temperature: 0.7
     },
     {
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: `Contexto do Circuito Atual do Usuário:\n${circuitContext}\n\nPergunta do Usuário:\n${prompt}` }
-      ],
+      messages: chatMessages,
       temperature: 0.7
     }
   ];
