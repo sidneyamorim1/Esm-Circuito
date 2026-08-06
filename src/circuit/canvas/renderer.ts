@@ -1614,21 +1614,22 @@ export function drawComponent(
     case 'opamp_tl072':
     case 'opamp_tl074': {
       const isDIP14 = comp.type === 'opamp_tl074';
-      const width = 48;
-      const height = isDIP14 ? 224 : 128; // height adapted for pin spacing
+      const width = 48; // Corpo plástico
+      const height = isDIP14 ? 224 : 128; 
       const pinsPerSide = isDIP14 ? 7 : 4;
-      const pinSpacing = 32; // match relY terminal spacing (2 grid units)
+      const pinSpacing = 2 * GRID_SIZE; // Era 32, mas 2 * 20 = 40!
       const startY = -((pinsPerSide - 1) * pinSpacing) / 2;
+      const pinLengthX = 3 * GRID_SIZE; // Era 48, mas 3 * 20 = 60!
 
       // Pinos metálicos do DIP
       ctx.beginPath();
       for (let i = 0; i < pinsPerSide; i++) {
         const y = startY + i * pinSpacing;
         // Lado Esquerdo
-        ctx.moveTo(-48, y);
+        ctx.moveTo(-pinLengthX, y);
         ctx.lineTo(-width/2, y);
         // Lado Direito
-        ctx.moveTo(48, y);
+        ctx.moveTo(pinLengthX, y);
         ctx.lineTo(width/2, y);
       }
       ctx.stroke();
