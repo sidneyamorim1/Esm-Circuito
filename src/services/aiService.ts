@@ -1,5 +1,5 @@
 import type { CircuitComponent, CircuitWire } from '../types/circuit';
-import { createCircuitComponent, getDefaultTerminals } from '../utils/circuitUtils';
+import { createCircuitComponent } from '../utils/circuitUtils';
 
 export interface DiagnosticIssue {
   type: 'error' | 'warning' | 'info';
